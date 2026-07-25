@@ -1,0 +1,6 @@
+# Keep the build context small. do_save.sh writes multi-gigabyte *.tar.gz
+# archives into this folder, and without this file Docker would send them
+# (and the sample batch) to the daemon on every build.
+*.tar.gz
+test/
+__pycache__/

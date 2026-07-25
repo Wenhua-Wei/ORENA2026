@@ -1,0 +1,12 @@
+{
+  "qIDs": [
+    "q001",
+    "q002",
+    "q003"
+  ],
+  "batch_size": 3,
+  "layout": {
+    "plain": "plain/<qID>.mp4",
+    "overlayed": "overlayed/<qID>.mp4"
+  }
+}

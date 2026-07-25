@@ -1,0 +1,29 @@
+# Datasets
+/heico-focus-vqa/
+/LapChole-FOCUS-VQA/
+
+# Temporary inference outputs
+/few_shots_inference/temp/
+/few_shots_inference/temp2/
+
+# InternVL model weights
+/orena-docker/segment-algorithm/resources/InternVL3_5-4B-Instruct-a3fd3158/
+
+# Challenge document
+/orena-docker/FINAL_TRACK-2_document.pdf
+
+# Saved Docker image archive
+/orena-docker/segment-algorithm/segment-algorithm_2026-07-25_05-09-09.tar.gz
+
+# macOS metadata
+.DS_Store
+._*
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+
+# Python environments and caches
+.venv/
+venv/
+.pytest_cache/
