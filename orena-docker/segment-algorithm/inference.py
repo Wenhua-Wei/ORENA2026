@@ -15,8 +15,7 @@ import time
 from pathlib import Path
 from typing import Sequence
 
-# Import torch before video_utils/decord. The template warns that importing
-# Decord before PyTorch can break CUDA initialisation in some environments.
+
 import torch
 
 from focus import Request, Response, load_requests, save_items
@@ -32,9 +31,6 @@ from prompt_utils import (
 from video_utils import load_clip_frames
 
 
-# =============================================================================
-# Paths supplied by the challenge platform
-# =============================================================================
 
 APP_PATH = Path(__file__).resolve().parent
 INPUT_PATH = Path("/input")
@@ -57,17 +53,17 @@ MODEL_PATH = (
 # Inference configuration
 # =============================================================================
 
-USE_FEW_SHOT_EXAMPLES = True
+USE_FEW_SHOT_EXAMPLES = False
 
 TARGET_FPS = 1.0
-MAX_FRAMES = 20
+MAX_FRAMES = 32
 NUM_DECODE_THREADS = 1
 
 DEVICE = "cuda:0"
 DTYPE = torch.float16
 INPUT_SIZE = 448
 MAX_TILES_PER_FRAME = 1
-MAX_NEW_TOKENS = 64
+MAX_NEW_TOKENS = 128
 
 
 # =============================================================================
@@ -210,9 +206,7 @@ def run() -> int:
     log.info("PyTorch CUDA runtime: %s", torch.version.cuda)
     log.info("CUDA available: %s", torch.cuda.is_available())
 
-    # -------------------------------------------------------------------------
     # Load batch inputs
-    # -------------------------------------------------------------------------
 
     if not REQUESTS_PATH.is_file():
         log.error("Missing request file: %s", REQUESTS_PATH)
@@ -262,7 +256,6 @@ def run() -> int:
         output_path=output_path,
     )
 
-    # Docker Desktop on an Intel Mac cannot expose an NVIDIA CUDA GPU.
     if not torch.cuda.is_available():
         return run_cpu_interface_smoke_test(
             requests=requests,
@@ -277,9 +270,7 @@ def run() -> int:
     )
     log.info("Total GPU memory: %.2f GB", total_vram_gb)
 
-    # -------------------------------------------------------------------------
     # Load InternVL exactly once for the complete batch
-    # -------------------------------------------------------------------------
 
     engine = InternVLInferenceEngine(
         model_path=MODEL_PATH,
@@ -304,9 +295,7 @@ def run() -> int:
         time.monotonic() - model_load_start,
     )
 
-    # -------------------------------------------------------------------------
     # Process each independent (clip, question) pair
-    # -------------------------------------------------------------------------
 
     try:
         for index, request in enumerate(requests, start=1):
@@ -410,15 +399,11 @@ def run() -> int:
                 )
 
             finally:
-                # Do not call torch.cuda.empty_cache() after every question:
-                # retaining the CUDA allocator cache is faster for the batch.
                 if prediction is not None:
                     del prediction
                 if clip is not None:
                     del clip
 
-                # Save after every question. answer.json remains complete because
-                # unanswered qIDs retain their empty placeholder responses.
                 save_responses(
                     requests=requests,
                     responses_by_qid=responses_by_qid,

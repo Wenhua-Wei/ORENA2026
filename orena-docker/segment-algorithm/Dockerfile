@@ -1,6 +1,10 @@
 FROM --platform=linux/amd64 \
-    pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime \
+    pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime \
     AS segment-algorithm-amd64
+
+# FROM --platform=linux/amd64 \
+#     pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime \
+#     AS segment-algorithm-amd64
 
 ENV PYTHONUNBUFFERED=1 \
     HF_HUB_OFFLINE=1 \
@@ -11,12 +15,31 @@ ENV PYTHONUNBUFFERED=1 \
     PATH=/home/user/.local/bin:${PATH}
 
 # Runtime libraries required by OpenCV and related dependencies.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
+# RUN apt-get update \
+#     && apt-get install -y --no-install-recommends \
+#         libgl1 \
+#         libglib2.0-0 \
+#         libxcb1 \
+#     && rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    find /etc/apt -type f \
+        \( -name "*.list" -o -name "*.sources" \) \
+        -exec sed -i \
+            -e 's|http://archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
+            -e 's|http://security.ubuntu.com/ubuntu|https://security.ubuntu.com/ubuntu|g' \
+            {} +; \
+    rm -rf /var/lib/apt/lists/*; \
+    apt-get \
+        -o Acquire::Retries=5 \
+        -o Acquire::https::No-Cache=true \
+        -o Acquire::https::No-Store=true \
+        update; \
+    apt-get install -y --no-install-recommends \
         libgl1 \
         libglib2.0-0 \
-        libxcb1 \
-    && rm -rf /var/lib/apt/lists/*
+        libxcb1; \
+    rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -r user \
     && useradd \

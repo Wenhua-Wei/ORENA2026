@@ -278,8 +278,7 @@ def build_prompt(
 
 
 if __name__ == "__main__":
-    # Standalone smoke test. Edit paths directly; no command-line arguments
-    # are required.
+    # smoke test. 
     project_root = Path(
         "/cs/student/projects1/aibh/2024/wenhuawe/ORENA"
     )

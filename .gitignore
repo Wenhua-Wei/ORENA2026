@@ -1,6 +1,8 @@
 # Datasets
 /heico-focus-vqa/
 /LapChole-FOCUS-VQA/
+/tryout-segment-batch-28/
+
 
 # Temporary inference outputs
 /few_shots_inference/temp/
@@ -27,3 +29,4 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
+/tryout-segment-batch-28/
