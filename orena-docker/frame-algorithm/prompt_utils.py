@@ -1,6 +1,7 @@
-"""Prompt utilities for ORena FOCUS SEGMENT zero-shot inference.
+"""Prompt utilities for ORena FOCUS FRAME inference.
 
-The prompt uses only information available during challenge inference:
+The current query prompt uses only information available during challenge
+inference:
 
 - ``focus.Request``;
 - the batch-specific ``FO_definitions.json``; and
@@ -9,26 +10,27 @@ The prompt uses only information available during challenge inference:
 Reference answers, answer-format labels, capability labels, OOD labels, and
 other reference-side metadata are never used to construct the prompt.
 
-SEGMENT requests contain one already-trimmed laparoscopic video clip. The model
-receives chronological sampled frames, and each frame is labelled with its
-absolute timestamp on the original procedure timeline.
+FRAME requests contain one still image. Timestamp metadata is not separately
+included in the model prompt because the supplied image is the complete visual
+input.
 """
 
 from __future__ import annotations
 
 import json
 import math
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
 from focus import Request
 
+import re
+
 
 @dataclass(frozen=True)
 class FewShotExample:
-    """One optional text-only SEGMENT training demonstration."""
+    """One optional text-only FRAME training demonstration."""
 
     question: str
     answer: str
@@ -41,62 +43,48 @@ class FewShotExample:
             raise ValueError("Few-shot answer must not be empty.")
 
 
-# Keep this empty for zero-shot inference.
+# Keep the default empty for zero-shot inference. If few-shot prompting is
+# enabled later, add only FRAME examples here. Do not reuse SEGMENT examples
+# involving temporal localization, duration, ordering, or multi-frame tracking.
 DEFAULT_FEW_SHOT_EXAMPLES: tuple[FewShotExample, ...] = ()
 
 
 _SHARED_INSTRUCTIONS_BEFORE_DEFINITIONS = """\
-You are a surgical assistant. The supplied images are chronological frames sampled from one already-trimmed laparoscopic video segment. Each frame label is an absolute timestamp on the original procedure timeline.
+You are given one laparoscopic image from a minimally invasive surgical procedure and one question about visible foreign objects.
 
-Answer the current question using:
-1. visual evidence in the supplied frames;
+Answer using only:
+1. visual evidence in the supplied image;
 2. explicit facts and constraints stated in the question;
-3. the frame timestamp labels;
-4. the procedure type as supporting context; and
-5. the foreign-object definitions.\
+3. the procedure type as supporting context; and
+4. the supplied foreign-object definitions.\
 """
 
 
 _SHARED_INSTRUCTIONS_AFTER_DEFINITIONS = """\
+Apply the foreign-object definitions exactly. A separate foreign object being held by an instrument is still a foreign object. Count a partially visible object when it is sufficiently visible to identify.
+
 Before answering, silently identify the visible foreign-object classes and distinct physical instances, then resolve only what the question asks.
 
-Interpretation rules:
-- Visibility means visibility in the camera view.
-- Insertion or creation means introduction into the abdominal cavity or creation of a specimen, not a later reappearance of an object already inside.
-- Retrieval or removal means removal from the surgical site or body cavity. Temporary occlusion or leaving the camera view is not retrieval.
-- Leaving and re-entering the field of view requires the same object instance to be continuously absent for any stated minimum duration and then visibly reappear.
-- Distinct instances are different physical objects. Repeated views of the same object count once.
-- Different classes means unique canonical foreign-object classes.
-- Co-occurrence means that all named objects are visible in the same frame.
-- Maximum appearing at once means the largest simultaneous instance count in one frame.
-- Counts of insertions, applications, retrievals, disappearances, or returns refer to events, not to the number of frames showing an event.
-- First, second, third, or n-th refers to chronological event or instance order.
-- "For most of the time" means the greatest total visible duration.
-- "Longest continuous time" means the longest uninterrupted visible interval.
-- For quadrant questions, first identify the frame required by the temporal condition, then locate the center of the requested object relative to the image center: top/left, top/right, bottom/left, or bottom/right.
-- "All visible foreign objects are of the same class" is true only when at least one foreign object is visible and exactly one distinct class is represented.
+Counting rules:
+- Object-instance count means the number of distinct physical foreign objects.
+- Object-class count means the number of distinct foreign-object classes.
+- A count for a named class includes only visible instances of that class.
+- Co-occurrence is yes only when both named classes are visible.
+- All objects are of the same class only when exactly one distinct class is represented among the visible foreign objects.
 
-Timestamp rules:
-- A time point is an absolute original-procedure timestamp taken from the frame labels.
-- A duration is an elapsed HH:MM:SS interval, not an absolute timestamp.
-- For "first", return the earliest time satisfying the condition.
-- For "last", return the latest time satisfying the condition.
-- Return multiple timestamps in chronological order.
-
-For purpose, function, cause, consequence, "usually", or "should" questions, combine the visible evidence with surgical meaning.
+For questions asking for every object's position, report every visible foreign-object instance separately, including multiple instances of the same class, and follow the requested structure exactly.
+For occlusion questions, name the foreign object being occluded, not the instrument or anatomical structure causing the occlusion.
+For grasping questions, answer yes only when the foreign object is visibly held or clamped by an instrument, not merely touching or lying beside it.
 
 Determine the required answer format from the wording of the question and follow it exactly:
 - Binary: exactly yes or no.
 - Number: one non-negative integer only.
-- Percentage: one non-negative number only.
 - Foreign-object class: canonical class name(s), comma-separated, or none.
-- Time: HH:MM:SS timestamp(s), comma-separated.
 - Multiple choice: only the selected option or options exactly as written in the question.
 - Open-ended: a concise direct answer that fully addresses the question.
 
 Return only the answer, with no explanation, reasoning, prefix, or label. Do not add terminal punctuation unless the requested answer is open-ended.\
 """
-
 
 def load_fo_definitions(path: str | Path) -> str:
     """Load the JSON-encoded text stored in ``FO_definitions.json``."""
@@ -128,24 +116,8 @@ def load_fo_definitions(path: str | Path) -> str:
 
     return definitions
 
-
 def format_fo_definitions(fo_definitions: str) -> str:
-    """Convert underlined FO definitions into compact prompt-friendly text.
-
-    Expected input structure::
-
-        Foreign Object (FO) Definition
-        ==============================
-
-        <general definition>
-
-        Foreign Object Classes
-        ======================
-
-        Sponge
-        ------
-        <class definition>
-    """
+    """Convert the underlined FO definitions into prompt-friendly text."""
 
     if not isinstance(fo_definitions, str):
         raise TypeError("fo_definitions must be a string.")
@@ -247,10 +219,16 @@ def format_fo_definitions(fo_definitions: str) -> str:
             description_lines.append(current.rstrip())
             index += 1
 
-        while description_lines and not description_lines[0].strip():
+        while (
+            description_lines
+            and not description_lines[0].strip()
+        ):
             description_lines.pop(0)
 
-        while description_lines and not description_lines[-1].strip():
+        while (
+            description_lines
+            and not description_lines[-1].strip()
+        ):
             description_lines.pop()
 
         if not description_lines:
@@ -258,7 +236,9 @@ def format_fo_definitions(fo_definitions: str) -> str:
                 f"FO class {class_name!r} has no definition."
             )
 
-        classes.append((class_name, description_lines))
+        classes.append(
+            (class_name, description_lines)
+        )
 
     if not classes:
         raise ValueError("No FO classes were found.")
@@ -281,36 +261,17 @@ def format_fo_definitions(fo_definitions: str) -> str:
             for line in description_lines
             if line.strip()
         )
-        output_lines.append(
-            f"{class_name}: {class_definition}"
-        )
+        output_lines.append(f"{class_name}: {class_definition}")
 
     return "\n".join(output_lines)
 
 
-def seconds_to_timestamp(seconds: float) -> str:
-    """Convert non-negative seconds to a floored ``HH:MM:SS`` timestamp."""
-
-    value = float(seconds)
-
-    if not math.isfinite(value):
-        raise ValueError("seconds must be finite.")
-
-    if value < 0:
-        raise ValueError("seconds must be non-negative.")
-
-    total_seconds = int(value)
-    hours = total_seconds // 3600
-    minutes = (total_seconds % 3600) // 60
-    secs = total_seconds % 60
-
-    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
 def format_few_shot_examples(
     examples: Sequence[FewShotExample],
 ) -> str:
-    """Format optional demonstrations as Question/Answer blocks."""
+    """Format demonstrations as repeated ``Question`` / ``Answer`` blocks."""
 
     blocks = [
         "\n".join(
@@ -333,8 +294,8 @@ def build_shared_prompt(
 ) -> str:
     """Build the prompt portion reusable for every request in one batch.
 
-    ``FO_definitions.json`` must be read once per container run because the
-    available classes and definitions may differ between batches.
+    ``FO_definitions.json`` must still be read once per container run because
+    the available classes and definitions may differ between batches.
     """
 
     definitions = fo_definitions.strip()
@@ -355,16 +316,14 @@ def build_shared_prompt(
     if few_shot_examples:
         sections.append(
             "Examples:\n"
-            + format_few_shot_examples(
-                few_shot_examples
-            )
+            + format_few_shot_examples(few_shot_examples)
         )
 
     return "\n\n".join(sections)
 
 
 def build_request_prompt(request: Request) -> str:
-    """Build the request-specific SEGMENT prompt."""
+    """Build the request-specific FRAME prompt."""
 
     question = request.question.strip()
 
@@ -376,44 +335,20 @@ def build_request_prompt(request: Request) -> str:
     if not procedure_type:
         procedure_type = "Unknown"
 
-    start_time = float(request.start_time)
-    end_time = float(request.end_time)
-
-    if not math.isfinite(start_time) or not math.isfinite(end_time):
-        raise ValueError(
-            "request start_time and end_time must be finite."
-        )
-
-    if start_time < 0:
-        raise ValueError(
-            "request.start_time must be non-negative."
-        )
-
-    if end_time <= start_time:
-        raise ValueError(
-            "request.end_time must be greater than request.start_time."
-        )
-
     return "\n".join(
         [
             "Current request:",
             f"Procedure type: {procedure_type}",
-            (
-                "Original procedure time window: "
-                f"{seconds_to_timestamp(start_time)} to "
-                f"{seconds_to_timestamp(end_time)}"
-            ),
             f"Question: {question}",
             "Answer:",
         ]
     )
 
-
 def build_prompt(
     request: Request,
     shared_prompt: str,
 ) -> str:
-    """Combine the reusable batch prompt with one SEGMENT request."""
+    """Combine the reusable batch prompt with one FRAME request."""
 
     shared = shared_prompt.strip()
 
@@ -424,7 +359,7 @@ def build_prompt(
 
 
 def main() -> None:
-    """Run a local zero-shot smoke test."""
+    """Run a local smoke test without command-line arguments."""
 
     project_dir = Path(__file__).resolve().parent
 
@@ -436,10 +371,9 @@ def main() -> None:
         / "FO_definitions.json"
     )
 
-    definitions = load_fo_definitions(
-        definitions_path
-    )
+    definitions = load_fo_definitions(definitions_path)
 
+    # Zero-shot by default.
     shared_prompt = build_shared_prompt(
         fo_definitions=definitions,
         few_shot_examples=(),
@@ -447,11 +381,15 @@ def main() -> None:
 
     request = Request(
         qID="q0001",
-        videoID="0001 - Laparoscopic Cholecystectomy.mp4",
-        start_time=132.0,
-        end_time=143.0,
-        procedure_type="laparoscopic cholecystectomy",
-        question="Is a foreign object visible in the scene?",
+        videoID="0029 - Heico - Sigma - 10.avi",
+        start_time=1999.0,
+        end_time=1999.0,
+        procedure_type="Sigmoid Resection",
+        question=(
+            "Which combination of foreign object classes is visible "
+            "in this frame? Please provide the class names or answer "
+            "with none."
+        ),
     )
 
     prompt = build_prompt(
@@ -460,7 +398,7 @@ def main() -> None:
     )
 
     print("=" * 80)
-    print("ORena FOCUS SEGMENT prompt-utils smoke test")
+    print("ORena FOCUS FRAME prompt-utils smoke test")
     print("=" * 80)
     print(prompt)
     print("\n" + "=" * 80)

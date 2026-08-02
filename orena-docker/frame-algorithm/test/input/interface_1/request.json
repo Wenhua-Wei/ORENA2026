@@ -1,0 +1,26 @@
+[
+  {
+    "qID": "q001",
+    "videoID": "example-video-01",
+    "start_time": 132.5,
+    "end_time": 132.5,
+    "procedure_type": "laparoscopic cholecystectomy",
+    "question": "Is a foreign object visible in the scene?"
+  },
+  {
+    "qID": "q002",
+    "videoID": "example-video-02",
+    "start_time": 415.0,
+    "end_time": 415.0,
+    "procedure_type": "laparoscopic cholecystectomy",
+    "question": "How many foreign objects are visible?"
+  },
+  {
+    "qID": "q003",
+    "videoID": "example-video-03",
+    "start_time": 78.25,
+    "end_time": 78.25,
+    "procedure_type": "laparoscopic cholecystectomy",
+    "question": "Is the foreign object in contact with tissue?"
+  }
+]

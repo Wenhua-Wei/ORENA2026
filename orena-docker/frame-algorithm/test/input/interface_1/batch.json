@@ -1,0 +1,11 @@
+{
+  "qIDs": [
+    "q001",
+    "q002",
+    "q003"
+  ],
+  "batch_size": 3,
+  "layout": {
+    "frames": "frames/<qID>.png"
+  }
+}
