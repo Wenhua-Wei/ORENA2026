@@ -333,9 +333,15 @@ class InternVLInferenceEngine:
             )
         else:
             video_prefix = "".join(
-                f"Frame {index + 1} ({label}): <image>\n"
-                for index, label in enumerate(frame_labels)
+                f"{label}: <image>\n"
+                for label in frame_labels
             )
+
+#        else:
+#            video_prefix = "".join(
+#                f"Frame {index + 1} ({label}): <image>\n"
+#                for index, label in enumerate(frame_labels)
+#            )
 
         question = video_prefix + prompt.strip()
 

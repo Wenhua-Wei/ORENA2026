@@ -1,34 +1,28 @@
-"""Prompt utilities for ORena FOCUS SEGMENT zero-shot inference.
+"""Prompt utilities for ORena FOCUS SEGMENT few-shot inference.
 
-The prompt uses only information available during challenge inference:
-
+The current query prompt uses only information available at challenge inference:
 - ``focus.Request``;
-- the batch-specific ``FO_definitions.json``; and
-- optional fixed text-only demonstrations.
+- the batch-specific ``FO_definitions.json`` only for canonical FO class names; and
+- fixed text-only demonstrations selected from training data.
 
-Reference answers, answer-format labels, capability labels, OOD labels, and
-other reference-side metadata are never used to construct the prompt.
-
-SEGMENT requests contain one already-trimmed laparoscopic video clip. The model
-receives chronological sampled frames, and each frame is labelled with its
-absolute timestamp on the original procedure timeline.
+The current query's answer, answer format, capability labels, OOD status, and
+other reference-side metadata are never used to build the prompt.
 """
 
 from __future__ import annotations
 
 import json
-import math
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
 from focus import Request
+from focus.foreign_objects import FOType
 
 
 @dataclass(frozen=True)
 class FewShotExample:
-    """One optional text-only SEGMENT training demonstration."""
+    """One text-only training demonstration."""
 
     question: str
     answer: str
@@ -36,70 +30,137 @@ class FewShotExample:
     def __post_init__(self) -> None:
         if not self.question.strip():
             raise ValueError("Few-shot question must not be empty.")
-
         if not self.answer.strip():
             raise ValueError("Few-shot answer must not be empty.")
 
 
-# Keep this empty for zero-shot inference.
-DEFAULT_FEW_SHOT_EXAMPLES: tuple[FewShotExample, ...] = ()
+DEFAULT_FEW_SHOT_EXAMPLES: tuple[FewShotExample, ...] = (
+    FewShotExample(
+        question=(
+            "Which surgical foreign object is inserted or created (in case of a specimen) in the abdominal cavity in this video?"
+        ),
+        answer=(
+            "Silicone loop"
+        ),
+    ),
+    FewShotExample(
+        question=(
+            "This video contains one External drain. In which quadrant of the frame is the center of the External drain located for most of the time, relative to the image center? Please select one answer: top/left; top/right; bottom/left; bottom/right"
+        ),
+        answer="top/left",
+    ),
+    FewShotExample(
+        question=(
+            "After the first Silicone loop was inserted in the abdomen in this video, which other foreign object classes are visible in the video?"
+        ),
+        answer="Clip, External drain",
+    ),
+   FewShotExample(
+       question=(
+           "At which time points were clips applied to somewhere in the abdomen? Please return the time points chronologically ordered in the format hh:mm:ss separated by a comma for each individual clip instance."
+       ),
+       answer="01:43:51, 01:43:54",
+   ),
+    FewShotExample(
+        question=(
+            "Does a Sponge leave the field of view for at least 3 seconds and re-enter later?"
+        ),
+        answer="no",
+    ),
+    FewShotExample(
+        question=(
+            "After the first Clip was inserted in the abdomen in this video, which other foreign object classes are visible in the video?"
+        ),
+        answer="none",
+    ),
+    FewShotExample(
+        question=(
+            "Do Specimens and Specimen bags co-occur in any frame of this video?"
+        ),
+        answer="yes",
+    ),
+    FewShotExample(
+        question="In %, how many of the frames of this video contain a Sponge?",
+        answer="16.67",
+    ),
+    FewShotExample(
+        question=(
+            "Why is suction being used despite the sponge not being soaked? Please provide a single reason without additional explanation."
+        ),
+        answer="Blood pooling in the small pelvis; sponge not suitable for clearing.",
+    ),
 
+    FewShotExample(
+        question=(
+            "What purpose does the sponge serve in this video segment?"
+        ),
+        answer="Stabilization.",
+    ),
 
-_SHARED_INSTRUCTIONS_BEFORE_DEFINITIONS = """\
-You are a surgical assistant. The supplied images are chronological frames sampled from one already-trimmed laparoscopic video segment. Each frame label is an absolute timestamp on the original procedure timeline.
+    FewShotExample(
+        question=(
+            "How many different foreign object classes do you see in this video?"
+        ),
+        answer="2",
+    ),
 
-Answer the current question using:
-1. visual evidence in the supplied frames;
-2. explicit facts and constraints stated in the question;
-3. the frame timestamp labels;
-4. the procedure type as supporting context; and
-5. the foreign-object definitions.\
+    FewShotExample(
+        question=(
+            "List all foreign objects that are visible in this video frame."
+        ),
+        answer="Specimen, Specimen bag",
+    ),
+)
+
+_SHARED_INSTRUCTIONS = """\
+You are a surgical assistant analysing endoscopic video from a minimally invasive surgical procedure. There are procedures like Proctocolectomy, Rectal Resection, Sigmoid Resection, Laparoscopic Cholecystectomy, etc. as specified below under “Current request”. Answer the surgical question using the visual evidence in the provided frames, paying particular attention to foreign objects. A foreign object (FO) is an object that has been fully introduced into the patient’s body cavity and is no longer connected to the external environment. Each foreign object must be retrieved, intentionally left in place, or otherwise explicitly accounted for before the procedure ends. Examples include {fo_class_examples}. Standard surgical instruments that remain connected to the external environment, such as graspers, scissors, trocars, staplers, suction devices, and cameras, are not considered foreign objects.
+Examples of typical procedure-related actions that may occur include, but are not limited to:
+- Proctocolectomy: mesenteric/tissue dissection, inferior mesenteric vessel clipping, rectal staple-line management and transection, specimen bagging, bowel approximation and anastomosis-related preparation, retraction, hemostasis, and drainage.
+- Rectal Resection: mesenteric/blunt dissection, vascular clipping or ligation, bowel-lesion suturing, loop-ileostomy marking, specimen-bag extraction, retraction, and drain placement.
+- Sigmoid Resection: inferior mesenteric artery/vein clipping, vascular division, colon mobilization and sigmoid-mesocolon dissection, colorectal anastomosis, air-leak testing, suture reinforcement or anastomotic revision, drain placement, and hemostasis.
+- Laparoscopic Cholecystectomy: Critical View of Safety preparation, cystic duct and artery clipping and division, gallbladder dissection from the liver/cystic plate, specimen bagging and retrieval, gallstone retrieval, cholangiography when applicable, retraction, and hemostasis.
+
+{frame_sampling_description} For timestamp questions, return the absolute original-procedure time shown in the top-left corner of the frames, not the time elapsed since the beginning of the trimmed clip. For questions asking how long something lasts, return the elapsed duration as the end time minus the start time, in HH:MM:SS format.
+
+Determine the required answer format strictly from the wording of the question and follow the corresponding rule, as illustrated by the examples below. Return only the answer, with no explanation or prefix.
+
+- Binary:
+Q: Does a Specimen leave the field of view for at least 3 seconds and re-enter later? Please answer with yes or no.
+A: no
+
+- Number:
+Q: In total, how many distinct Sponges are visible in this video? Please provide a number.
+A: 2
+
+- Percentage:
+Q: In %, how many of the frames of this video contain a Clip? Please provide the answer in the format xx%.
+A: 28.33
+
+- Foreign-object class:
+Q: Which surgical foreign object is inserted or created (in case of a specimen) in the abdominal cavity in this video? Please provide a class name or answer with none.
+A: Silicone loop
+
+- Time:
+Q: During the video, at what time is the 1st visible Clip inserted in the abdomen for the first time? Please provide the answer in hh:mm:ss.
+A: 00:18:17
+
+- Duration:
+Q: In total, how long was the Specimen bag visible in this video? Please provide the duration in HH:MM:SS.
+A: 00:00:43
+
+- Multiple choice:
+Q: This video contains one Specimen bag. When it first becomes visible, in which quadrant of the frame is its center located relative to the image center? Please select one answer: top/left; top/right; bottom/left; bottom/right
+A: top/right
+
+- Open-ended:
+Q: What problem is encountered removing this specimen bag from the abdomen? Please provide a single surgical challenge encountered during specimen bag removal.
+A: The bag is too big for the incision.
 """
 
-
-_SHARED_INSTRUCTIONS_AFTER_DEFINITIONS = """\
-Before answering, silently identify the visible foreign-object classes and distinct physical instances, then resolve only what the question asks.
-
-Interpretation rules:
-- Visibility means visibility in the camera view.
-- Insertion or creation means introduction into the abdominal cavity or creation of a specimen, not a later reappearance of an object already inside.
-- Retrieval or removal means removal from the surgical site or body cavity. Temporary occlusion or leaving the camera view is not retrieval.
-- Leaving and re-entering the field of view requires the same object instance to be continuously absent for any stated minimum duration and then visibly reappear.
-- Distinct instances are different physical objects. Repeated views of the same object count once.
-- Different classes means unique canonical foreign-object classes.
-- Co-occurrence means that all named objects are visible in the same frame.
-- Maximum appearing at once means the largest simultaneous instance count in one frame.
-- Counts of insertions, applications, retrievals, disappearances, or returns refer to events, not to the number of frames showing an event.
-- First, second, third, or n-th refers to chronological event or instance order.
-- "For most of the time" means the greatest total visible duration.
-- "Longest continuous time" means the longest uninterrupted visible interval.
-- For quadrant questions, first identify the frame required by the temporal condition, then locate the center of the requested object relative to the image center: top/left, top/right, bottom/left, or bottom/right.
-- "All visible foreign objects are of the same class" is true only when at least one foreign object is visible and exactly one distinct class is represented.
-
-Timestamp rules:
-- A time point is an absolute original-procedure timestamp taken from the frame labels.
-- A duration is an elapsed HH:MM:SS interval, not an absolute timestamp.
-- For "first", return the earliest time satisfying the condition.
-- For "last", return the latest time satisfying the condition.
-- Return multiple timestamps in chronological order.
-
-For purpose, function, cause, consequence, "usually", or "should" questions, combine the visible evidence with surgical meaning.
-
-Determine the required answer format from the wording of the question and follow it exactly:
-- Binary: exactly yes or no.
-- Number: one non-negative integer only.
-- Percentage: one non-negative number only.
-- Foreign-object class: canonical class name(s), comma-separated, or none.
-- Time: HH:MM:SS timestamp(s), comma-separated.
-- Multiple choice: only the selected option or options exactly as written in the question.
-- Open-ended: a concise direct answer that fully addresses the question.
-
-Return only the answer, with no explanation, reasoning, prefix, or label. Do not add terminal punctuation unless the requested answer is open-ended.\
-"""
 
 
 def load_fo_definitions(path: str | Path) -> str:
-    """Load the JSON-encoded text stored in ``FO_definitions.json``."""
+    """Load FO definitions, allowing an empty file or a JSON string."""
 
     definitions_path = Path(path).expanduser().resolve()
 
@@ -108,209 +169,108 @@ def load_fo_definitions(path: str | Path) -> str:
             f"FO definitions file does not exist: {definitions_path}"
         )
 
+    raw = definitions_path.read_text(encoding="utf-8").strip()
+
+    # Accept a zero-byte or whitespace-only file.
+    if not raw:
+        return ""
+
     try:
-        with definitions_path.open("r", encoding="utf-8") as file:
-            value = json.load(file)
+        value = json.loads(raw)
     except json.JSONDecodeError as error:
         raise ValueError(
-            f"FO_definitions.json is not valid JSON: {definitions_path}"
+            "FO_definitions.json must be empty or contain one "
+            "valid JSON string."
         ) from error
+
+    # Optionally accept JSON null as empty.
+    if value is None:
+        return ""
 
     if not isinstance(value, str):
         raise ValueError(
-            "FO_definitions.json must contain one JSON string."
+            "FO_definitions.json must be empty or contain one JSON string."
         )
 
-    definitions = value.strip()
-
-    if not definitions:
-        raise ValueError("FO_definitions.json is empty.")
-
-    return definitions
+    return value.strip()
 
 
-def format_fo_definitions(fo_definitions: str) -> str:
-    """Convert underlined FO definitions into compact prompt-friendly text.
+def extract_fo_class_names(fo_definitions: str) -> tuple[str, ...]:
+    """Extract foreign-object class headings from the supplied definitions text.
 
-    Expected input structure::
-
-        Foreign Object (FO) Definition
-        ==============================
-
-        <general definition>
-
-        Foreign Object Classes
-        ======================
+    The submission-template FO definitions use reStructuredText-style class headings,
+    for example::
 
         Sponge
         ------
-        <class definition>
+
+    Only headings underlined with hyphens are treated as class names. Section
+    headings underlined with equals signs are therefore ignored automatically.
     """
 
     if not isinstance(fo_definitions, str):
         raise TypeError("fo_definitions must be a string.")
 
-    lines = fo_definitions.strip().splitlines()
+    lines = [line.rstrip() for line in fo_definitions.splitlines()]
+    names: list[str] = []
 
-    definition_heading = "Foreign Object (FO) Definition"
-    classes_heading = "Foreign Object Classes"
+    for index in range(len(lines) - 1):
+        heading = lines[index].strip()
+        underline = lines[index + 1].strip()
 
-    try:
-        definition_index = lines.index(definition_heading)
-        classes_index = lines.index(classes_heading)
-    except ValueError as error:
-        raise ValueError(
-            "FO definitions do not contain the expected section headings."
-        ) from error
+        if heading and underline and set(underline) == {"-"} and len(underline) >= 1:
+            names.append(heading)
 
-    if definition_index >= classes_index:
-        raise ValueError(
-            "FO definition sections appear in an unexpected order."
-        )
+    return tuple(dict.fromkeys(names))
 
-    if (
-        definition_index + 1 >= len(lines)
-        or not re.fullmatch(
-            r"={3,}",
-            lines[definition_index + 1].strip(),
-        )
-    ):
-        raise ValueError(
-            "The general FO definition heading has no valid underline."
-        )
 
-    if (
-        classes_index + 1 >= len(lines)
-        or not re.fullmatch(
-            r"={3,}",
-            lines[classes_index + 1].strip(),
-        )
-    ):
-        raise ValueError(
-            "The FO classes heading has no valid underline."
-        )
+def resolve_fo_class_names(fo_definitions: str) -> tuple[str, ...]:
+    """Return class names from ``FO_definitions.json`` with a safe fallback.
 
-    general_lines = lines[
-        definition_index + 2 : classes_index
-    ]
+    During local experiments ``FO_definitions.json`` may be empty. In that case,
+    use the canonical class registry from the installed ``orena-focus`` package.
+    The full definition text is never inserted into the prompt.
+    """
 
-    while general_lines and not general_lines[0].strip():
-        general_lines.pop(0)
+    extracted = extract_fo_class_names(fo_definitions)
+    if extracted:
+        return extracted
 
-    while general_lines and not general_lines[-1].strip():
-        general_lines.pop()
+    return tuple(FOType.names())
 
-    if not general_lines:
-        raise ValueError("The general FO definition is empty.")
 
-    class_lines = lines[classes_index + 2 :]
-    classes: list[tuple[str, list[str]]] = []
-    index = 0
+def format_fo_class_examples(class_names: Sequence[str]) -> str:
+    """Format canonical FO class names as a compact natural-language list."""
 
-    while index < len(class_lines):
-        if not class_lines[index].strip():
-            index += 1
-            continue
+    names = [str(name).strip() for name in class_names if str(name).strip()]
 
-        class_name = class_lines[index].strip()
+    if not names:
+        raise ValueError("At least one foreign-object class name is required.")
+    if len(names) == 1:
+        return names[0]
+    if len(names) == 2:
+        return f"{names[0]} and {names[1]}"
 
-        if (
-            index + 1 >= len(class_lines)
-            or not re.fullmatch(
-                r"-{3,}",
-                class_lines[index + 1].strip(),
-            )
-        ):
-            raise ValueError(
-                "Expected an underlined FO class heading, found: "
-                f"{class_lines[index]!r}"
-            )
-
-        index += 2
-        description_lines: list[str] = []
-
-        while index < len(class_lines):
-            current = class_lines[index]
-
-            is_next_heading = (
-                current.strip()
-                and index + 1 < len(class_lines)
-                and re.fullmatch(
-                    r"-{3,}",
-                    class_lines[index + 1].strip(),
-                )
-            )
-
-            if is_next_heading:
-                break
-
-            description_lines.append(current.rstrip())
-            index += 1
-
-        while description_lines and not description_lines[0].strip():
-            description_lines.pop(0)
-
-        while description_lines and not description_lines[-1].strip():
-            description_lines.pop()
-
-        if not description_lines:
-            raise ValueError(
-                f"FO class {class_name!r} has no definition."
-            )
-
-        classes.append((class_name, description_lines))
-
-    if not classes:
-        raise ValueError("No FO classes were found.")
-
-    general_definition = " ".join(
-        line.strip()
-        for line in general_lines
-        if line.strip()
-    )
-
-    output_lines = [
-        "Foreign-object (FO) definitions:",
-        general_definition,
-        "Foreign Object Classes:",
-    ]
-
-    for class_name, description_lines in classes:
-        class_definition = " ".join(
-            line.strip()
-            for line in description_lines
-            if line.strip()
-        )
-        output_lines.append(
-            f"{class_name}: {class_definition}"
-        )
-
-    return "\n".join(output_lines)
+    return ", ".join(names[:-1]) + f", and {names[-1]}"
 
 
 def seconds_to_timestamp(seconds: float) -> str:
-    """Convert non-negative seconds to a floored ``HH:MM:SS`` timestamp."""
+    """Convert seconds to ``HH:MM:SS`` using the floored procedure second."""
 
-    value = float(seconds)
-
-    if not math.isfinite(value):
-        raise ValueError("seconds must be finite.")
-
-    if value < 0:
+    if seconds < 0:
         raise ValueError("seconds must be non-negative.")
 
-    total_seconds = int(value)
+    total_seconds = int(seconds)
     hours = total_seconds // 3600
     minutes = (total_seconds % 3600) // 60
     secs = total_seconds % 60
-
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
 def format_few_shot_examples(
     examples: Sequence[FewShotExample],
 ) -> str:
-    """Format optional demonstrations as Question/Answer blocks."""
+    """Format demonstrations as repeated ``Question:`` / ``Answer:`` pairs."""
 
     blocks = [
         "\n".join(
@@ -327,69 +287,39 @@ def format_few_shot_examples(
 
 def build_shared_prompt(
     fo_definitions: str,
-    few_shot_examples: Sequence[
-        FewShotExample
-    ] = DEFAULT_FEW_SHOT_EXAMPLES,
+    few_shot_examples: Sequence[FewShotExample] = DEFAULT_FEW_SHOT_EXAMPLES,
 ) -> str:
     """Build the prompt portion reusable for every request in one batch.
 
-    ``FO_definitions.json`` must be read once per container run because the
-    available classes and definitions may differ between batches.
+    ``FO_definitions.json`` is used only to obtain the canonical foreign-object
+    class names. Its full definition text is deliberately not appended to the
+    model prompt.
     """
 
-    definitions = fo_definitions.strip()
-
-    if not definitions:
-        raise ValueError("fo_definitions must not be empty.")
-
-    formatted_definitions = format_fo_definitions(
-        definitions
+    fo_class_names = resolve_fo_class_names(fo_definitions)
+    shared_instructions = _SHARED_INSTRUCTIONS.replace(
+        "{fo_class_examples}",
+        format_fo_class_examples(fo_class_names),
     )
 
-    sections = [
-        _SHARED_INSTRUCTIONS_BEFORE_DEFINITIONS,
-        formatted_definitions,
-        _SHARED_INSTRUCTIONS_AFTER_DEFINITIONS,
-    ]
+    sections = [shared_instructions.strip()]
 
     if few_shot_examples:
         sections.append(
             "Examples:\n"
-            + format_few_shot_examples(
-                few_shot_examples
-            )
+            + format_few_shot_examples(few_shot_examples)
         )
 
     return "\n\n".join(sections)
 
 
 def build_request_prompt(request: Request) -> str:
-    """Build the request-specific SEGMENT prompt."""
+    """Build the request-specific part of the prompt."""
 
-    question = request.question.strip()
-
-    if not question:
+    if not request.question.strip():
         raise ValueError("request.question must not be empty.")
 
-    procedure_type = str(request.procedure_type).strip()
-
-    if not procedure_type:
-        procedure_type = "Unknown"
-
-    start_time = float(request.start_time)
-    end_time = float(request.end_time)
-
-    if not math.isfinite(start_time) or not math.isfinite(end_time):
-        raise ValueError(
-            "request start_time and end_time must be finite."
-        )
-
-    if start_time < 0:
-        raise ValueError(
-            "request.start_time must be non-negative."
-        )
-
-    if end_time <= start_time:
+    if request.end_time <= request.start_time:
         raise ValueError(
             "request.end_time must be greater than request.start_time."
         )
@@ -397,13 +327,13 @@ def build_request_prompt(request: Request) -> str:
     return "\n".join(
         [
             "Current request:",
-            f"Procedure type: {procedure_type}",
-            (
-                "Original procedure time window: "
-                f"{seconds_to_timestamp(start_time)} to "
-                f"{seconds_to_timestamp(end_time)}"
-            ),
-            f"Question: {question}",
+            f"Procedure type: {request.procedure_type}",
+#            (
+#                "Original procedure time window: "
+#                f"{seconds_to_timestamp(request.start_time)} to "
+#                f"{seconds_to_timestamp(request.end_time)}"
+#            ),
+            f"Question: {request.question.strip()}",
             "Answer:",
         ]
     )
@@ -412,61 +342,87 @@ def build_request_prompt(request: Request) -> str:
 def build_prompt(
     request: Request,
     shared_prompt: str,
+    num_frames: int,
+    target_fps: float,
+    max_frames: int,
 ) -> str:
-    """Combine the reusable batch prompt with one SEGMENT request."""
+    """Combine the reusable prompt with request-specific information."""
 
     shared = shared_prompt.strip()
 
     if not shared:
         raise ValueError("shared_prompt must not be empty.")
 
+    duration = float(request.end_time) - float(request.start_time)
+
+    if num_frames >= max_frames and duration > max_frames / target_fps:
+        frame_sampling_description = (
+            f"The input consists of {num_frames} chronologically ordered "
+            f"frames uniformly selected across the {duration:g}-second "
+            f"trimmed video segment after sampling at {target_fps:g} fps."
+        )
+    else:
+        frame_sampling_description = (
+            f"The input consists of {num_frames} chronologically ordered "
+            f"frames sampled at {target_fps:g} fps from the "
+            f"{duration:g}-second trimmed video segment."
+        )
+
+    shared = shared.replace(
+        "{frame_sampling_description}",
+        frame_sampling_description,
+    )
+
     return shared + "\n\n" + build_request_prompt(request)
 
 
-def main() -> None:
-    """Run a local zero-shot smoke test."""
-
-    project_dir = Path(__file__).resolve().parent
+if __name__ == "__main__":
+    project_root = Path(
+        "/raid2/compass/ORENA2026/orena-docker/segment-algorithm"
+    )
 
     definitions_path = (
-        project_dir
-        / "test"
-        / "input"
-        / "interface_1"
+        project_root
+        / "test/input/interface_1"
         / "FO_definitions.json"
     )
 
-    definitions = load_fo_definitions(
-        definitions_path
-    )
+    definitions = load_fo_definitions(definitions_path)
+    fo_class_names = resolve_fo_class_names(definitions)
+
+    print("FO classes used in prompt:")
+    print("  " + ", ".join(fo_class_names))
+    print()
 
     shared_prompt = build_shared_prompt(
-        fo_definitions=definitions,
+        definitions,
         few_shot_examples=(),
     )
 
     request = Request(
-        qID="q0001",
-        videoID="0001 - Laparoscopic Cholecystectomy.mp4",
-        start_time=132.0,
-        end_time=143.0,
+        qID="q001",
+        videoID="example-video-01",
+        start_time=132.5,
+        end_time=143.5,
         procedure_type="laparoscopic cholecystectomy",
         question="Is a foreign object visible in the scene?",
     )
 
-    prompt = build_prompt(
-        request=request,
-        shared_prompt=shared_prompt,
+    target_fps = 1.0
+    max_frames = 20
+
+    duration = request.end_time - request.start_time
+    num_frames = min(
+        max_frames,
+        max(1, int(duration * target_fps)),
     )
 
-    print("=" * 80)
-    print("ORena FOCUS SEGMENT prompt-utils smoke test")
-    print("=" * 80)
-    print(prompt)
-    print("\n" + "=" * 80)
-    print("Prompt length:", len(prompt), "characters")
-    print("Smoke test passed.")
-
-
-if __name__ == "__main__":
-    main()
+    print(
+        build_prompt(
+            request=request,
+            shared_prompt=shared_prompt,
+            num_frames=num_frames,
+            target_fps=target_fps,
+            max_frames=max_frames,
+        )
+    )

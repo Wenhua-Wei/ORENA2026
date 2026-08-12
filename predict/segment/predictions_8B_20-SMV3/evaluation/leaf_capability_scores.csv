@@ -1,0 +1,16 @@
+primary_capability,primary_capability_value,capability_group,correct,count,accuracy
+1a,object_identification,object_recognition,12,27,0.4444444444444444
+1b,instance_matching,object_recognition,4,4,1.0
+1c,object_attributes,object_recognition,2,3,0.6666666666666666
+1d,spatial_localization_camera,object_recognition,3,15,0.2
+1e,spatial_localization_situs,object_recognition,0,1,0.0
+2a,temporal_localization,temporal_grounding,5,44,0.11363636363636363
+2b,duration_estimation,temporal_grounding,0,6,0.0
+3a,object_aggregation,aggregation,8,40,0.2
+3b,event_aggregation,aggregation,2,10,0.2
+4a,fo_interaction_recognition,event_understanding,6,14,0.42857142857142855
+4b,fo_usage_purpose,event_understanding,24,28,0.8571428571428571
+4c,temporal_ordering,event_understanding,4,8,0.5
+5a,functional_reasoning,complex_reasoning,2,10,0.2
+5b,causal_consequence_reasoning,complex_reasoning,10,22,0.45454545454545453
+5c,multi_step_reasoning,complex_reasoning,4,18,0.2222222222222222

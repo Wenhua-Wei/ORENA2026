@@ -4,3 +4,10 @@
 *.tar.gz
 test/
 __pycache__/
+*.pyc
+*.pyo
+
+.DS_Store
+**/.DS_Store
+
+resources/**/.cache/

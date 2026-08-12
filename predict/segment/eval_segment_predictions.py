@@ -99,14 +99,14 @@ PREPARED_DIR = (
 )
 
 PREDICTIONS_DIR = (
-    ORENA_ROOT / "predict/segment/predictions_8B_20-SMV2"
+    ORENA_ROOT / "predict/segment/predictions_4B_20-SM-NEWV1-Hi2"
 )
 
 EVALUATION_DIR = PREDICTIONS_DIR / "evaluation"
 
-REQUESTS_PATH = PREPARED_DIR / "requests.json"
-REFERENCES_PATH = PREPARED_DIR / "references.json"
-SELECTED_QIDS_PATH = PREPARED_DIR / "selected_qids.json"
+REQUESTS_PATH = PREPARED_DIR / "prepared_50_per_capability/request.json"
+REFERENCES_PATH = PREPARED_DIR / "prepared_50_per_capability/references.json"
+SELECTED_QIDS_PATH = PREPARED_DIR / "prepared_50_per_capability/selected_qids.json"
 
 RESPONSES_PATH = PREDICTIONS_DIR / "responses.json"
 INFERENCE_LOG_PATH = PREDICTIONS_DIR / "inference_log.csv"
@@ -1394,3 +1394,4 @@ def run() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(run())
+

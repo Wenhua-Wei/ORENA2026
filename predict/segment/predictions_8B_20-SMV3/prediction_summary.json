@@ -1,0 +1,15 @@
+{
+  "updated_at_utc": "2026-08-02T08:01:19.853206+00:00",
+  "elapsed_wall_clock_s": 1535.8310631336644,
+  "model_load_seconds": 6.693899458274245,
+  "prepared_requests": 250,
+  "responses_saved_total": 250,
+  "successes": 250,
+  "failures": 0,
+  "unprocessed": 0,
+  "mean_success_latency_s": 6.115534248000002,
+  "mean_model_inference_s": 5.006676308000006,
+  "mean_clip_duration_s": 118.968,
+  "mean_sampled_frames": 17.98,
+  "timing_note": "Local model loading is amortized across all 250 questions and is not directly comparable with platform batch timing."
+}

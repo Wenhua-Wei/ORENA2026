@@ -1,32 +1,49 @@
-"""ORena SAVE FOCUS — SEGMENT Track — InternVL3.5 few-shot inference.
+"""ORena SAVE FOCUS — SEGMENT Track — InternVL3.5 inference.
 
-One container run receives a batch of focus.Request objects in /input/request.json.
-Each request has its own already-trimmed video clip at /input/plain/<qID>.mp4.
+Docker/platform mode reads a batch of focus.Request objects from
+/input/request.json and writes /output/answer.json.
 
-The model, tokenizer, foreign-object definitions, and shared few-shot prompt are
-loaded once per batch. One focus.Response is written for every request.
+Direct local mode (``python inference.py``) automatically reads the committed
+sample batch from ``test/input/interface_1`` and writes to
+``test/output/interface_1``. Paths can also be overridden with
+FOCUS_INPUT_PATH and FOCUS_OUTPUT_PATH.
+
+Each request has its own already-trimmed video clip. This implementation uses
+the overlayed <qID>.mp4 so the original-procedure HH:MM:SS clock is visible.
+
+The model, tokenizer, foreign-object class names, and shared prompt are loaded
+once per batch. One focus.Response is written for every request.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 from pathlib import Path
 from typing import Sequence
 
-# Import torch before video_utils/decord. The template warns that importing
-# Decord before PyTorch can break CUDA initialisation in some environments.
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
+os.environ.setdefault(
+    "PYTORCH_CUDA_ALLOC_CONF",
+    "expandable_segments:True",
+)
+
 import torch
 
 from focus import Request, Response, load_requests, save_items
 
-from answer_utils import extract_fo_class_names, normalize_answer
+from answer_utils import normalize_answer
 from model_utils import InternVLInferenceEngine
 from prompt_utils import (
     build_prompt,
     build_shared_prompt,
     load_fo_definitions,
+    resolve_fo_class_names,
     seconds_to_timestamp,
 )
 from video_utils import load_clip_frames
@@ -37,13 +54,55 @@ from video_utils import load_clip_frames
 # =============================================================================
 
 APP_PATH = Path(__file__).resolve().parent
-INPUT_PATH = Path("/input")
-OUTPUT_PATH = Path("/output")
+#print(APP_PATH)
+
+
+def resolve_io_paths() -> tuple[Path, Path, str]:
+    """Resolve input/output paths for Docker or direct local execution.
+
+    Priority:
+    1. FOCUS_INPUT_PATH + FOCUS_OUTPUT_PATH environment variables, if both set.
+    2. Docker/platform mode when running inside a container.
+    3. Direct ``python inference.py`` mode using the committed local test batch.
+    """
+
+    env_input = os.environ.get("FOCUS_INPUT_PATH")
+#    print("env_input: ", env_input)
+    env_output = os.environ.get("FOCUS_OUTPUT_PATH")
+#    print("env_input: ", env_output)
+
+    if env_input or env_output:
+        if not env_input or not env_output:
+            raise ValueError(
+                "Set both FOCUS_INPUT_PATH and FOCUS_OUTPUT_PATH, or neither."
+            )
+
+        return (
+            Path(env_input).expanduser().resolve(),
+            Path(env_output).expanduser().resolve(),
+            "environment",
+        )
+
+    # Challenge execution and do_test_run.sh both run inside Docker.
+    if Path("/.dockerenv").exists() or Path("/input/request.json").is_file():
+        return Path("/input"), Path("/output"), "docker"
+
+    # Direct host execution:
+    #   cd segment-algorithm
+    #   python inference.py
+    return (
+        APP_PATH / "test" / "input" / "interface_1",
+        APP_PATH / "test" / "output" / "interface_1",
+        "local",
+    )
+
+
+INPUT_PATH, OUTPUT_PATH, EXECUTION_MODE = resolve_io_paths()
 
 REQUESTS_PATH = INPUT_PATH / "request.json"
 FO_DEFINITIONS_PATH = INPUT_PATH / "FO_definitions.json"
 
-USE_OVERLAY = False
+USE_OVERLAY = True
 VIDEO_DIR = INPUT_PATH / ("overlayed" if USE_OVERLAY else "plain")
 
 MODEL_PATH = (
@@ -61,7 +120,7 @@ MODEL_PATH = (
 USE_FEW_SHOT_EXAMPLES = False
 
 TARGET_FPS = 1.0
-MAX_FRAMES = 20
+MAX_FRAMES = 32
 NUM_DECODE_THREADS = 1
 
 DEVICE = "cuda:0"
@@ -100,13 +159,9 @@ def build_shared_inference_prompt(
 ) -> tuple[str, tuple[str, ...]]:
     """Build the shared prompt and canonical FO-class list once per batch."""
 
-    fo_class_names = extract_fo_class_names(fo_definitions)
-
-    if not fo_class_names:
-        raise ValueError(
-            "No foreign-object class names could be extracted from "
-            "FO_definitions.json."
-        )
+    fo_class_names = resolve_fo_class_names(
+        fo_definitions
+    )
 
     if USE_FEW_SHOT_EXAMPLES:
         shared_prompt = build_shared_prompt(
@@ -207,6 +262,9 @@ def run() -> int:
     output_path = OUTPUT_PATH / "answer.json"
 
     log.info("=== ORena SAVE FOCUS SEGMENT inference start ===")
+    log.info("Execution mode: %s", EXECUTION_MODE)
+    log.info("Input path: %s", INPUT_PATH)
+    log.info("Output path: %s", OUTPUT_PATH)
     log.info("PyTorch: %s", torch.__version__)
     log.info("PyTorch CUDA runtime: %s", torch.version.cuda)
     log.info("CUDA available: %s", torch.cuda.is_available())
@@ -346,8 +404,21 @@ def run() -> int:
                 prompt = build_prompt(
                     request=request,
                     shared_prompt=shared_prompt,
+                    num_frames=clip.num_frames,
+                    target_fps=TARGET_FPS,
+                    max_frames=MAX_FRAMES,
                 )
-                
+
+#                print("\n" + "=" * 100)
+#                print(f"PROMPT FOR qID={qid}")
+#                print("=" * 100)
+#                print(prompt)
+#                print("=" * 100 + "\n", flush=True)
+
+
+
+
+
                 prediction = engine.predict(
                     images=clip.images,
                     prompt=prompt,

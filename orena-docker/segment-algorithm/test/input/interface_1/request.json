@@ -1,26 +1,242 @@
 [
   {
-    "qID": "q001",
-    "videoID": "example-video-01",
-    "start_time": 132.5,
-    "end_time": 143.5,
-    "procedure_type": "laparoscopic cholecystectomy",
-    "question": "Is a foreign object visible in the scene?"
+    "qID": "heico_2683548",
+    "videoID": "0022 - Heico - Sigma - 3.avi",
+    "start_time": 12884,
+    "end_time": 13183,
+    "procedure_type": "Sigmoid Resection",
+    "question": "What object was inserted or created (in case of a specimen) in the video? Please provide a class name."
   },
   {
-    "qID": "q002",
-    "videoID": "example-video-02",
-    "start_time": 415.0,
-    "end_time": 426.0,
-    "procedure_type": "laparoscopic cholecystectomy",
-    "question": "How many foreign objects are visible?"
+    "qID": "heico_2126766",
+    "videoID": "0021 - Heico - Sigma - 2.avi",
+    "start_time": 6161,
+    "end_time": 6190,
+    "procedure_type": "Sigmoid Resection",
+    "question": "Does the External drain at 01:43:10 also appear at 01:42:41? Please answer with yes or no."
   },
   {
-    "qID": "q003",
-    "videoID": "example-video-03",
-    "start_time": 78.25,
-    "end_time": 89.25,
-    "procedure_type": "laparoscopic cholecystectomy",
-    "question": "Is the foreign object in contact with tissue?"
+    "qID": "heico_2096557",
+    "videoID": "0020 - Heico - Sigma - 1.avi",
+    "start_time": 384,
+    "end_time": 413,
+    "procedure_type": "Sigmoid Resection",
+    "question": "There is one foreign object in this video. Considering the center of the foreign object relative to the image center, which quadrants of the video have not been populated with the foreign object during the whole video? Please select none, one or multiple answers: top/left; top/right; bottom/left; bottom/right"
+  },
+  {
+    "qID": "lapchole_4953468",
+    "videoID": "0183 - Laparoscopic Cholecystectomy.mp4",
+    "start_time": 551,
+    "end_time": 850,
+    "procedure_type": "Laparoscopic Cholecystectomy",
+    "question": "What surgical foreign object is visible in this video? Please provide a class name or answer with none."
+  },
+  {
+    "qID": "lapchole_794179",
+    "videoID": "0019 - Laparoscopic Cholecystectomy.mp4",
+    "start_time": 598,
+    "end_time": 897,
+    "procedure_type": "Laparoscopic Cholecystectomy",
+    "question": "Does the Sponge at 00:13:07 also appear at 00:10:58? Please answer with yes or no."
+  },
+  {
+    "qID": "lapchole_1874177",
+    "videoID": "0048 - Laparoscopic Cholecystectomy.mp4",
+    "start_time": 715,
+    "end_time": 834,
+    "procedure_type": "Laparoscopic Cholecystectomy",
+    "question": "At timepoint 00:11:55 please provide all relative central positions of foreign objects present in the frame. Please provide the answer in the following format: “number. object type: quadrant”, where number represents an enumeration starting with 1, object type is the type of the foreign object and quadrant is one of the following options: top/left, top/right, bottom/left, bottom/right. Respond “none” in case there are no foreign objects present at timepoint 00:11:55. For example: 1. Sponge: top/left 2. Sponge: top/right 3. Needle: bottom/left"
+  },
+  {
+    "qID": "heico_2170748",
+    "videoID": "0022 - Heico - Sigma - 3.avi",
+    "start_time": 1530,
+    "end_time": 1649,
+    "procedure_type": "Sigmoid Resection",
+    "question": "At what time was a Sponge last visible in the video? Please provide an answer in the format hh:mm:ss."
+  },
+  {
+    "qID": "heico_2113734",
+    "videoID": "0021 - Heico - Sigma - 2.avi",
+    "start_time": 2169,
+    "end_time": 2288,
+    "procedure_type": "Sigmoid Resection",
+    "question": "In %, how many of the frames of this video contain a Clip? Please provide the answer in the format xx%."
+  },
+  {
+    "qID": "heico_2604255",
+    "videoID": "0028 - Heico - Sigma - 9.avi",
+    "start_time": 15970,
+    "end_time": 16089,
+    "procedure_type": "Sigmoid Resection",
+    "question": "Which foreign object class is visible for the longest (not necessarily consecutive) total duration in this video? Please provide the class name or answer none."
+  },
+  {
+    "qID": "lapchole_4713956",
+    "videoID": "0158 - Laparoscopic Cholecystectomy.mp4",
+    "start_time": 674,
+    "end_time": 793,
+    "procedure_type": "Laparoscopic Cholecystectomy",
+    "question": "At which time points were clips applied to somewhere in the abdomen? Please return the time points chronologically ordered in the format hh:mm:ss separated by a comma for each individual clip instance."
+  },
+  {
+    "qID": "lapchole_5026661",
+    "videoID": "0000 - Laparoscopic Cholecystectomy.mp4",
+    "start_time": 1949,
+    "end_time": 2068,
+    "procedure_type": "Laparoscopic Cholecystectomy",
+    "question": "Which foreign object class is visible for the longest (not necessarily consecutive) total duration in this video? Please provide the class name or answer none."
+  },
+  {
+    "qID": "lapchole_5026781",
+    "videoID": "0045 - Laparoscopic Cholecystectomy.mp4",
+    "start_time": 756,
+    "end_time": 875,
+    "procedure_type": "Laparoscopic Cholecystectomy",
+    "question": "In %, how many of the frames of this video contain a Clip? Please provide the answer in the format xx%."
+  },
+  {
+    "qID": "heico_2215728",
+    "videoID": "0023 - Heico - Sigma - 4.avi",
+    "start_time": 4207,
+    "end_time": 4326,
+    "procedure_type": "Sigmoid Resection",
+    "question": "What is the maximum number of Clips appearing at once in a single frame? Please provide a number."
+  },
+  {
+    "qID": "heico_2396471",
+    "videoID": "0025 - Heico - Sigma - 6.avi",
+    "start_time": 4582,
+    "end_time": 4611,
+    "procedure_type": "Sigmoid Resection",
+    "question": "After the first Clip was inserted in the abdomen in this video, which other foreign object classes are visible in the video? Please provide the class names or answer with none."
+  },
+  {
+    "qID": "heico_2623391",
+    "videoID": "0028 - Heico - Sigma - 9.avi",
+    "start_time": 378,
+    "end_time": 497,
+    "procedure_type": "Sigmoid Resection",
+    "question": "How many separate times does a Sponge completely leave the field of view for 3 frames or more and then return within this video? Please provide a number."
+  },
+  {
+    "qID": "lapchole_5026030",
+    "videoID": "0033 - Laparoscopic Cholecystectomy.mp4",
+    "start_time": 1752,
+    "end_time": 1755,
+    "procedure_type": "Laparoscopic Cholecystectomy",
+    "question": "How many radiopaque clips are visible in this video? Please provide a single integer."
+  },
+  {
+    "qID": "lapchole_5026705",
+    "videoID": "0045 - Laparoscopic Cholecystectomy.mp4",
+    "start_time": 1482,
+    "end_time": 1601,
+    "procedure_type": "Laparoscopic Cholecystectomy",
+    "question": "After the first Specimen was created in this video, which other foreign object classes are visible in the video? Please provide the class names or answer with none."
+  },
+  {
+    "qID": "lapchole_5026020",
+    "videoID": "0032 - Laparoscopic Cholecystectomy.mp4",
+    "start_time": 1675,
+    "end_time": 1830,
+    "procedure_type": "Laparoscopic Cholecystectomy",
+    "question": "How many clips are shown being completely placed onto a single anatomic structure in this clip? Please provide a single integer."
+  },
+  {
+    "qID": "heico_2590349",
+    "videoID": "0027 - Heico - Sigma - 8.avi",
+    "start_time": 1157,
+    "end_time": 1456,
+    "procedure_type": "Sigmoid Resection",
+    "question": "Is the Sponge visible at 00:22:20 being retrieved at that moment? Please answer with yes or no."
+  },
+  {
+    "qID": "heico_2681796",
+    "videoID": "0021 - Heico - Sigma - 2.avi",
+    "start_time": 1491,
+    "end_time": 1501,
+    "procedure_type": "Sigmoid Resection",
+    "question": "Does the surgical foreign object visible here usually remain intra-abdominally at the end of the procedure? Please answer with 'yes' or 'no'."
+  },
+  {
+    "qID": "heico_2063239",
+    "videoID": "0020 - Heico - Sigma - 1.avi",
+    "start_time": 1820,
+    "end_time": 2119,
+    "procedure_type": "Sigmoid Resection",
+    "question": "Before the Needle was inserted in the abdomen, was there already a foreign object of a different class visible? Please answer with yes or no."
+  },
+  {
+    "qID": "lapchole_5026282",
+    "videoID": "0074 - Laparoscopic Cholecystectomy.mp4",
+    "start_time": 1220,
+    "end_time": 1352,
+    "procedure_type": "Laparoscopic Cholecystectomy",
+    "question": "Which anatomic structure is clipped in this sequence? Please provide a single anatomical structure name (vessel/duct/organ) without explanation."
+  },
+  {
+    "qID": "lapchole_5023649",
+    "videoID": "0000 - Laparoscopic Cholecystectomy.mp4",
+    "start_time": 1455,
+    "end_time": 1465,
+    "procedure_type": "Laparoscopic Cholecystectomy",
+    "question": "Does the surgical foreign object visible here usually remain intra-abdominally at the end of the procedure?"
+  },
+  {
+    "qID": "lapchole_5025905",
+    "videoID": "0016 - Laparoscopic Cholecystectomy.mp4",
+    "start_time": 1125,
+    "end_time": 1211,
+    "procedure_type": "Laparoscopic Cholecystectomy",
+    "question": "Between which clips would you anticipate using the scissors (number the clips in order of application)? Please provide two clip indices as integers in the exact format 'X: <int>, Y: <int>', where X is the earlier-applied clip and Y is the later-applied clip."
+  },
+  {
+    "qID": "heico_2682197",
+    "videoID": "0028 - Heico - Sigma - 9.avi",
+    "start_time": 1746,
+    "end_time": 1778,
+    "procedure_type": "Sigmoid Resection",
+    "question": "What is the additional role of the sponge in frame 00:29:10 besides sponging blood? Please provide a single task performed by the sponge."
+  },
+  {
+    "qID": "heico_2682324",
+    "videoID": "0021 - Heico - Sigma - 2.avi",
+    "start_time": 6190,
+    "end_time": 6201,
+    "procedure_type": "Sigmoid Resection",
+    "question": "If this drain outputs 200 ml of reddish, serous fluid on the third postoperative day, what actions are needed? Please provide a single concept without explanation."
+  },
+  {
+    "qID": "heico_2134962",
+    "videoID": "0022 - Heico - Sigma - 3.avi",
+    "start_time": 1447,
+    "end_time": 1566,
+    "procedure_type": "Sigmoid Resection",
+    "question": "With which other foreign object classes does the foreign object class, which is last seen in the video, co-occur throughout the video? Please provide the class name(s) or answer none."
+  },
+  {
+    "qID": "lapchole_5026208",
+    "videoID": "0060 - Laparoscopic Cholecystectomy.mp4",
+    "start_time": 2798,
+    "end_time": 2808,
+    "procedure_type": "Laparoscopic Cholecystectomy",
+    "question": "Does the surgical foreign object visible here usually remain intra-abdominally at the end of the procedure? Please answer with 'yes' or 'no'."
+  },
+  {
+    "qID": "lapchole_5023793",
+    "videoID": "0032 - Laparoscopic Cholecystectomy.mp4",
+    "start_time": 2609,
+    "end_time": 2619,
+    "procedure_type": "Laparoscopic Cholecystectomy",
+    "question": "Does the surgical foreign object visible here usually remain intra-abdominal at the end of the procedure? Please answer with 'yes' or 'no'."
+  },
+  {
+    "qID": "lapchole_5026035",
+    "videoID": "0033 - Laparoscopic Cholecystectomy.mp4",
+    "start_time": 2040,
+    "end_time": 2041,
+    "procedure_type": "Laparoscopic Cholecystectomy",
+    "question": "How many clips placed in this video will be visible on a postoperative X-ray? Please provide a single integer."
   }
 ]

@@ -2,9 +2,10 @@ FROM --platform=linux/amd64 \
     pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime \
     AS segment-algorithm-amd64
 
-# FROM --platform=linux/amd64 \
-#     pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime \
-#     AS segment-algorithm-amd64
+#FROM --platform=linux/amd64 \
+#    pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime \
+#    AS segment-algorithm-amd64
+
 
 ENV PYTHONUNBUFFERED=1 \
     HF_HUB_OFFLINE=1 \

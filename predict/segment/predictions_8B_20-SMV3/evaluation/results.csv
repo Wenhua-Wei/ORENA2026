@@ -1,0 +1,251 @@
+qID,video,ood,clinical,primary,answer_format,latency,timed_out,correctness
+lapchole_test_2722336,0066 - Laparoscopic Cholecystectomy.mp4,False,False,object_identification,fo_class,6.7132445415481925,False,True
+heico_test_2163412,0022 - Heico - Sigma - 3.avi,False,False,temporal_localization,time,7.3193915812298656,False,False
+heico_test_2681781,0025 - Heico - Sigma - 6.avi,False,False,fo_usage_purpose,open_ended,2.7000871002674103,False,True
+heico_test_2225356,0023 - Heico - Sigma - 4.avi,False,False,event_aggregation,number,6.414793132804334,False,False
+heico_test_2180258,0022 - Heico - Sigma - 3.avi,False,False,object_aggregation,fo_class,6.371301122941077,False,False
+lapchole_test_5023391,0027 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.65023045707494,False,True
+heico_test_1967327,0029 - Heico - Sigma - 10.avi,False,False,object_identification,fo_class,6.588823067955673,False,True
+lapchole_test_5026282,0074 - Laparoscopic Cholecystectomy.mp4,False,False,fo_interaction_recognition,open_ended,7.280128786340356,False,False
+heico_test_2683709,0028 - Heico - Sigma - 9.avi,False,False,fo_usage_purpose,open_ended,2.880567721091211,False,False
+heico_test_1958703,0029 - Heico - Sigma - 10.avi,False,False,object_aggregation,fo_class,6.393905476666987,False,False
+lapchole_test_1144579,0028 - Laparoscopic Cholecystectomy.mp4,False,False,spatial_localization_camera,multiple_choice,6.22394738253206,False,False
+heico_test_2644654,0028 - Heico - Sigma - 9.avi,False,False,temporal_localization,time,6.205400223843753,False,False
+heico_test_2022501,0020 - Heico - Sigma - 1.avi,False,False,object_identification,fo_class,6.283514101058245,False,False
+lapchole_test_11773,0000 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,7.084877941757441,False,False
+lapchole_test_5026100,0043 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,6.362260941416025,False,False
+heico_test_2295029,0024 - Heico - Sigma - 5.avi,False,False,temporal_localization,time,7.020571832545102,False,False
+lapchole_test_5026338,0089 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,6.9234813824296,False,False
+heico_test_2128962,0022 - Heico - Sigma - 3.avi,False,False,object_identification,fo_class,6.402385456487536,False,True
+heico_test_2684276,0029 - Heico - Sigma - 10.avi,False,False,object_aggregation,fo_class,6.478403780609369,False,False
+heico_test_2534652,0027 - Heico - Sigma - 8.avi,False,False,event_aggregation,number,6.639452922157943,False,False
+lapchole_test_5025907,0016 - Laparoscopic Cholecystectomy.mp4,False,False,functional_reasoning,open_ended,6.653460718691349,False,True
+lapchole_test_5025985,0028 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,6.8758976655080914,False,True
+lapchole_test_153598,0004 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,7.639174908399582,False,False
+lapchole_test_2785443,0070 - Laparoscopic Cholecystectomy.mp4,False,False,object_identification,fo_class,6.64530408103019,False,True
+lapchole_test_5026030,0033 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,1.0351090896874666,False,False
+lapchole_test_5026354,0093 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,6.485400696285069,False,True
+heico_test_2468907,0026 - Heico - Sigma - 7.avi,False,False,temporal_localization,time,7.063955068588257,False,False
+lapchole_test_2442234,0060 - Laparoscopic Cholecystectomy.mp4,False,False,spatial_localization_camera,multiple_choice,5.953636942431331,False,False
+heico_test_2017560,0029 - Heico - Sigma - 10.avi,False,False,fo_interaction_recognition,binary,7.15954452008009,False,False
+heico_test_2683657,0026 - Heico - Sigma - 7.avi,False,False,causal_consequence_reasoning,open_ended,7.10701525490731,False,True
+lapchole_test_5026703,0043 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,number,6.844742897897959,False,True
+lapchole_test_1722097,0043 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,7.521533654071391,False,False
+lapchole_test_2669519,0065 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,7.059782866388559,False,False
+lapchole_test_5023649,0000 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.627157817594707,False,True
+heico_test_2399276,0025 - Heico - Sigma - 6.avi,False,False,multi_step_reasoning,fo_class,6.064657750539482,False,False
+heico_test_2127659,0021 - Heico - Sigma - 2.avi,False,False,fo_interaction_recognition,binary,6.579406592994928,False,False
+lapchole_test_5026893,0060 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,6.671834853477776,False,False
+heico_test_2415200,0025 - Heico - Sigma - 6.avi,False,False,temporal_localization,time,10.216795952990651,False,False
+lapchole_test_4959136,0183 - Laparoscopic Cholecystectomy.mp4,False,False,instance_matching,binary,6.966115612536669,False,True
+heico_test_2683682,0027 - Heico - Sigma - 8.avi,False,False,fo_interaction_recognition,binary,7.050189547240734,False,True
+lapchole_test_5026021,0032 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,6.734256215393543,False,False
+lapchole_test_4693665,0158 - Laparoscopic Cholecystectomy.mp4,False,False,object_identification,fo_class,6.905168178491294,False,False
+heico_test_2417667,0025 - Heico - Sigma - 6.avi,False,False,temporal_localization,time,7.403832311742008,False,False
+heico_test_2162165,0022 - Heico - Sigma - 3.avi,False,False,temporal_localization,time,7.586274605244398,False,False
+heico_test_2683719,0028 - Heico - Sigma - 9.avi,False,False,functional_reasoning,open_ended,2.986544639803469,False,True
+lapchole_test_5024296,0093 - Laparoscopic Cholecystectomy.mp4,False,False,spatial_localization_situs,open_ended,4.006622615270317,False,False
+lapchole_test_5026283,0074 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,6.945618704892695,False,False
+lapchole_test_5026031,0033 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,6.064332511276007,False,True
+heico_test_2619062,0028 - Heico - Sigma - 9.avi,False,False,spatial_localization_camera,multiple_choice,7.28374501876533,False,False
+heico_test_2276527,0024 - Heico - Sigma - 5.avi,False,False,multi_step_reasoning,fo_class,6.553870783187449,False,True
+heico_test_2537894,0027 - Heico - Sigma - 8.avi,False,False,object_aggregation,number,7.055609753355384,False,False
+heico_test_2623311,0028 - Heico - Sigma - 9.avi,False,False,event_aggregation,number,6.648724596016109,False,False
+heico_test_2325636,0024 - Heico - Sigma - 5.avi,False,False,temporal_ordering,binary,7.128321408294141,False,True
+heico_test_2683622,0024 - Heico - Sigma - 5.avi,False,False,object_aggregation,number,7.089744267053902,False,False
+lapchole_test_994749,0026 - Laparoscopic Cholecystectomy.mp4,False,False,object_identification,fo_class,6.751052793115377,False,True
+lapchole_test_4714016,0158 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,10.427989834919572,False,False
+lapchole_test_5026212,0060 - Laparoscopic Cholecystectomy.mp4,False,False,functional_reasoning,open_ended,5.633643054403365,False,False
+lapchole_test_3169886,0078 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,10.703536527231336,False,False
+heico_test_2107536,0021 - Heico - Sigma - 2.avi,False,False,multi_step_reasoning,fo_class,6.6680656196549535,False,False
+heico_test_2141554,0022 - Heico - Sigma - 3.avi,False,False,object_identification,fo_class,6.87677928712219,False,True
+heico_test_2568277,0027 - Heico - Sigma - 8.avi,False,False,duration_estimation,time,7.221813464537263,False,False
+lapchole_test_5026241,0066 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,1.6294566607102752,False,False
+heico_test_2660925,0028 - Heico - Sigma - 9.avi,False,False,object_aggregation,number,6.706975285895169,False,False
+heico_test_2123848,0021 - Heico - Sigma - 2.avi,False,False,object_aggregation,number,6.550840144045651,False,False
+lapchole_test_5026516,0158 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,6.1963033908978105,False,False
+heico_test_2029792,0020 - Heico - Sigma - 1.avi,False,False,object_identification,fo_class,6.174770284444094,False,False
+lapchole_test_5026301,0079 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,6.901535815559328,False,False
+heico_test_2510002,0027 - Heico - Sigma - 8.avi,False,False,object_identification,fo_class,6.374942208640277,False,True
+heico_test_2683453,0029 - Heico - Sigma - 10.avi,False,False,causal_consequence_reasoning,open_ended,2.1013305075466633,False,True
+lapchole_test_5027420,0100 - Laparoscopic Cholecystectomy.mp4,False,False,spatial_localization_camera,multiple_choice,6.448566822335124,False,False
+heico_test_2384699,0024 - Heico - Sigma - 5.avi,False,False,fo_interaction_recognition,binary,7.207451211288571,False,True
+heico_test_2117662,0021 - Heico - Sigma - 2.avi,False,False,temporal_ordering,binary,7.033546403981745,False,True
+lapchole_test_5025973,0027 - Laparoscopic Cholecystectomy.mp4,False,False,functional_reasoning,open_ended,6.490550599992275,False,False
+lapchole_test_5026358,0093 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,4.912934394553304,False,True
+lapchole_test_5026215,0061 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.5836257617920637,False,True
+heico_test_2683674,0027 - Heico - Sigma - 8.avi,False,False,causal_consequence_reasoning,open_ended,5.208880819380283,False,True
+heico_test_2684190,0025 - Heico - Sigma - 6.avi,False,False,object_identification,fo_class,7.28053043782711,False,False
+lapchole_test_5023772,0072 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,2.6948820557445288,False,False
+lapchole_test_5025924,0017 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.64872785564512,False,True
+heico_test_2511326,0027 - Heico - Sigma - 8.avi,False,False,duration_estimation,fo_class,6.7804114241153,False,False
+lapchole_test_618480,0017 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,6.378283321857452,False,False
+lapchole_test_1130194,0027 - Laparoscopic Cholecystectomy.mp4,False,False,spatial_localization_camera,multiple_choice,6.700862282887101,False,False
+heico_test_2498726,0026 - Heico - Sigma - 7.avi,False,False,fo_interaction_recognition,binary,6.513095003552735,False,True
+heico_test_2516198,0027 - Heico - Sigma - 8.avi,False,False,object_identification,fo_class,6.696152914315462,False,True
+lapchole_test_5026117,0048 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,7.259076704271138,False,False
+heico_test_2208493,0023 - Heico - Sigma - 4.avi,False,False,multi_step_reasoning,fo_class,6.659181973896921,False,True
+heico_test_2043159,0020 - Heico - Sigma - 1.avi,False,False,temporal_localization,time,7.576977606862783,False,False
+heico_test_2213776,0023 - Heico - Sigma - 4.avi,False,False,object_identification,fo_class,6.5966139286756516,False,True
+heico_test_2595996,0028 - Heico - Sigma - 9.avi,False,False,object_identification,fo_class,7.051636602729559,False,False
+lapchole_test_5026574,0183 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.593752248212695,False,True
+lapchole_test_5023673,0033 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.7411487633362412,False,True
+lapchole_test_5026245,0066 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,7.163489713333547,False,False
+heico_test_2128647,0022 - Heico - Sigma - 3.avi,False,False,object_identification,fo_class,5.860753325745463,False,True
+lapchole_test_5025979,0027 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,6.13070072978735,False,True
+heico_test_2235767,0023 - Heico - Sigma - 4.avi,False,False,temporal_ordering,binary,7.169297395274043,False,True
+lapchole_test_5026899,0072 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,8.19607507251203,False,False
+heico_test_2267147,0024 - Heico - Sigma - 5.avi,False,False,object_identification,fo_class,6.392077478580177,False,False
+heico_test_2114647,0021 - Heico - Sigma - 2.avi,False,False,object_aggregation,number,6.422652205452323,False,False
+heico_test_2683467,0020 - Heico - Sigma - 1.avi,False,False,causal_consequence_reasoning,open_ended,6.664122017100453,False,False
+lapchole_test_5026343,0089 - Laparoscopic Cholecystectomy.mp4,False,False,functional_reasoning,open_ended,0.6841078186407685,False,False
+heico_test_2179398,0022 - Heico - Sigma - 3.avi,False,False,object_aggregation,fo_class,6.401371299289167,False,True
+lapchole_test_5026120,0048 - Laparoscopic Cholecystectomy.mp4,False,False,event_aggregation,open_ended,7.313583235256374,False,True
+heico_test_2134917,0022 - Heico - Sigma - 3.avi,False,False,multi_step_reasoning,fo_class,6.704448393546045,False,False
+heico_test_2135182,0022 - Heico - Sigma - 3.avi,False,False,multi_step_reasoning,fo_class,6.809762328863144,False,False
+heico_test_2683507,0021 - Heico - Sigma - 2.avi,False,False,multi_step_reasoning,fo_class,6.010924098081887,False,False
+lapchole_test_3430884,0089 - Laparoscopic Cholecystectomy.mp4,False,False,spatial_localization_camera,multiple_choice,7.181195511482656,False,False
+lapchole_test_5026034,0033 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,1.1787261897698045,False,False
+heico_test_2391658,0024 - Heico - Sigma - 5.avi,False,False,fo_interaction_recognition,binary,7.131540792062879,False,False
+heico_test_2485112,0026 - Heico - Sigma - 7.avi,False,False,object_aggregation,number,6.817423542030156,False,False
+lapchole_test_1806833,0045 - Laparoscopic Cholecystectomy.mp4,False,False,object_identification,binary,6.96317352540791,False,True
+heico_test_2683468,0020 - Heico - Sigma - 1.avi,False,False,causal_consequence_reasoning,open_ended,2.7921350840479136,False,True
+lapchole_test_5025832,0004 - Laparoscopic Cholecystectomy.mp4,False,False,event_aggregation,open_ended,7.223558871075511,False,True
+heico_test_2631152,0028 - Heico - Sigma - 9.avi,False,False,temporal_localization,time,6.881323665380478,False,False
+heico_test_2135256,0022 - Heico - Sigma - 3.avi,False,False,multi_step_reasoning,fo_class,6.810524340718985,False,True
+lapchole_test_5025906,0016 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,7.0528942327946424,False,True
+heico_test_2683445,0029 - Heico - Sigma - 10.avi,False,False,functional_reasoning,open_ended,6.733822796493769,False,False
+heico_test_2399687,0025 - Heico - Sigma - 6.avi,False,False,multi_step_reasoning,fo_class,6.524333069100976,False,False
+heico_test_2051033,0020 - Heico - Sigma - 1.avi,False,False,event_aggregation,number,6.716170423664153,False,False
+lapchole_test_3237122,0079 - Laparoscopic Cholecystectomy.mp4,False,False,instance_matching,binary,6.636970712803304,False,True
+heico_test_2155964,0022 - Heico - Sigma - 3.avi,False,False,event_aggregation,number,6.097906622104347,False,False
+heico_test_2423662,0025 - Heico - Sigma - 6.avi,False,False,object_aggregation,number,6.931588001549244,False,True
+lapchole_test_5025830,0004 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,7.542751906439662,False,True
+heico_test_2101310,0020 - Heico - Sigma - 1.avi,False,False,fo_interaction_recognition,binary,6.6597604705020785,False,False
+heico_test_2590349,0027 - Heico - Sigma - 8.avi,False,False,fo_interaction_recognition,binary,6.56782659329474,False,True
+lapchole_test_5026020,0032 - Laparoscopic Cholecystectomy.mp4,False,False,event_aggregation,open_ended,6.61807182058692,False,False
+lapchole_test_4666002,0149 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,6.893521714955568,False,True
+lapchole_test_5026300,0079 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,6.739903767593205,False,True
+heico_test_2399737,0025 - Heico - Sigma - 6.avi,False,False,multi_step_reasoning,fo_class,6.712594112381339,False,False
+heico_test_2216870,0023 - Heico - Sigma - 4.avi,False,False,temporal_ordering,open_ended,7.197633188217878,False,False
+heico_test_2225274,0023 - Heico - Sigma - 4.avi,False,False,event_aggregation,number,6.597853296436369,False,False
+lapchole_test_5026705,0045 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,fo_class,6.916713091544807,False,False
+lapchole_test_5026040,0033 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,0.6295046657323837,False,False
+lapchole_test_5027190,0019 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,7.0472711296752095,False,False
+heico_test_2276592,0024 - Heico - Sigma - 5.avi,False,False,multi_step_reasoning,fo_class,6.706441710703075,False,False
+lapchole_test_5026295,0078 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.6434175046160817,False,True
+heico_test_2684199,0026 - Heico - Sigma - 7.avi,False,False,spatial_localization_camera,multiple_choice,6.703294980339706,False,False
+heico_test_2681796,0021 - Heico - Sigma - 2.avi,False,False,fo_usage_purpose,open_ended,2.8508732402697206,False,True
+lapchole_test_5026302,0079 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,1.4803088791668415,False,False
+lapchole_test_3489516,0093 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,fo_class,6.481755622662604,False,False
+lapchole_test_5025909,0016 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.694641570560634,False,True
+heico_test_2683617,0024 - Heico - Sigma - 5.avi,False,False,object_aggregation,fo_class,7.272605010308325,False,False
+lapchole_test_3760019,0100 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,10.351454419083893,False,False
+heico_test_2112733,0021 - Heico - Sigma - 2.avi,False,False,object_identification,fo_class,7.115490650758147,False,False
+lapchole_test_5023218,0048 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.7340738587081432,False,True
+heico_test_2491030,0026 - Heico - Sigma - 7.avi,False,False,object_aggregation,number,7.246808771044016,False,True
+heico_test_2329284,0024 - Heico - Sigma - 5.avi,False,False,temporal_localization,time,7.55493647698313,False,False
+heico_test_2107638,0021 - Heico - Sigma - 2.avi,False,False,multi_step_reasoning,fo_class,6.58581614959985,False,False
+lapchole_test_5022626,0149 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.6753160199150443,False,True
+lapchole_test_1829587,0048 - Laparoscopic Cholecystectomy.mp4,False,False,object_identification,fo_class,7.399566069245338,False,False
+lapchole_test_3413304,0089 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,7.121178733184934,False,False
+lapchole_test_5026243,0066 - Laparoscopic Cholecystectomy.mp4,False,False,functional_reasoning,open_ended,6.505277707241476,False,False
+lapchole_test_5026118,0048 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,7.408553528599441,False,False
+heico_test_2020946,0029 - Heico - Sigma - 10.avi,False,False,temporal_localization,time,7.210875136777759,False,False
+lapchole_test_5026393,0100 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,6.525227187201381,False,False
+heico_test_2257684,0023 - Heico - Sigma - 4.avi,False,False,object_aggregation,number,6.915194930508733,False,True
+heico_test_1990011,0029 - Heico - Sigma - 10.avi,False,False,temporal_ordering,binary,7.178567187860608,False,False
+lapchole_test_5023793,0032 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,2.7557181175798178,False,False
+heico_test_2050860,0020 - Heico - Sigma - 1.avi,False,False,event_aggregation,number,6.687809753231704,False,False
+heico_test_2209830,0023 - Heico - Sigma - 4.avi,False,False,object_identification,fo_class,6.851456225849688,False,False
+heico_test_2637887,0028 - Heico - Sigma - 9.avi,False,False,temporal_ordering,binary,6.977654640562832,False,True
+lapchole_test_5026514,0149 - Laparoscopic Cholecystectomy.mp4,False,False,object_attributes,open_ended,2.6711323354393244,False,False
+heico_test_2249964,0023 - Heico - Sigma - 4.avi,False,False,duration_estimation,time,7.426458489149809,False,False
+heico_test_2119731,0021 - Heico - Sigma - 2.avi,False,False,temporal_localization,time,6.411295092664659,False,False
+lapchole_test_1347909,0033 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,7.489694413729012,False,False
+lapchole_test_3498119,0093 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,7.122865048237145,False,False
+heico_test_2022453,0020 - Heico - Sigma - 1.avi,False,False,object_identification,fo_class,6.402593900449574,False,False
+heico_test_2122627,0021 - Heico - Sigma - 2.avi,False,False,duration_estimation,time,6.941020890139043,False,False
+lapchole_test_5025933,0019 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.6855767043307424,False,True
+lapchole_test_5026119,0048 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,6.967405994422734,False,False
+lapchole_test_5023765,0072 - Laparoscopic Cholecystectomy.mp4,False,False,functional_reasoning,open_ended,5.678911422379315,False,False
+heico_test_2498352,0026 - Heico - Sigma - 7.avi,False,False,fo_interaction_recognition,binary,6.426296086981893,False,False
+lapchole_test_5027355,0072 - Laparoscopic Cholecystectomy.mp4,False,False,spatial_localization_camera,multiple_choice,6.652498166076839,False,False
+lapchole_test_5026571,0183 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,6.419516566209495,False,True
+lapchole_test_5026306,0079 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.67745778337121,False,True
+heico_test_2113374,0021 - Heico - Sigma - 2.avi,False,False,duration_estimation,percentage,5.741566128097475,False,False
+heico_test_2232348,0023 - Heico - Sigma - 4.avi,False,False,temporal_localization,time,7.455269111320376,False,True
+heico_test_2681792,0023 - Heico - Sigma - 4.avi,False,False,fo_usage_purpose,open_ended,2.8450759472325444,False,False
+lapchole_test_5023237,0043 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.6342260288074613,False,True
+heico_test_2683694,0027 - Heico - Sigma - 8.avi,False,False,object_identification,fo_class,6.2788810124620795,False,False
+heico_test_2603205,0028 - Heico - Sigma - 9.avi,False,False,object_identification,fo_class,6.753668809309602,False,False
+lapchole_test_5026022,0032 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,6.700926552526653,False,False
+lapchole_test_1014753,0026 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,9.887080118060112,False,False
+lapchole_test_5026342,0089 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.681291832588613,False,True
+lapchole_test_5026237,0065 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.8035629224032164,False,True
+heico_test_2064616,0020 - Heico - Sigma - 1.avi,False,False,temporal_localization,time,7.628368061967194,False,False
+heico_test_2427457,0025 - Heico - Sigma - 6.avi,False,False,object_aggregation,number,7.0315924268215895,False,False
+heico_test_2104306,0021 - Heico - Sigma - 2.avi,False,False,object_identification,fo_class,6.229480873793364,False,False
+lapchole_test_1805704,0045 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,6.486802727915347,False,False
+lapchole_test_120119,0004 - Laparoscopic Cholecystectomy.mp4,False,False,object_identification,fo_class,6.7078795954585075,False,True
+lapchole_test_5026028,0033 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,0.9679270684719086,False,False
+heico_test_2459321,0026 - Heico - Sigma - 7.avi,False,False,object_aggregation,number,7.088347116485238,False,False
+lapchole_test_5026517,0158 - Laparoscopic Cholecystectomy.mp4,False,False,fo_interaction_recognition,open_ended,10.706089057028294,False,True
+heico_test_2684099,0029 - Heico - Sigma - 10.avi,False,False,spatial_localization_camera,multiple_choice,7.283602664247155,False,True
+lapchole_test_1842688,0048 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,7.386347126215696,False,False
+lapchole_test_5026103,0043 - Laparoscopic Cholecystectomy.mp4,False,False,functional_reasoning,open_ended,6.707773803733289,False,False
+lapchole_test_2809963,0070 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,7.168746137060225,False,False
+lapchole_test_590390,0016 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,7.772700237110257,False,True
+heico_test_2283348,0024 - Heico - Sigma - 5.avi,False,False,object_identification,fo_class,6.796183086000383,False,False
+lapchole_test_5027670,0066 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,6.850917144678533,False,False
+heico_test_2682197,0028 - Heico - Sigma - 9.avi,False,False,functional_reasoning,open_ended,6.27700088173151,False,False
+heico_test_2509184,0027 - Heico - Sigma - 8.avi,False,False,multi_step_reasoning,fo_class,6.791592247784138,False,False
+lapchole_test_2522713,0061 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,6.689858080819249,False,False
+heico_test_2678508,0028 - Heico - Sigma - 9.avi,False,False,fo_interaction_recognition,binary,6.596669545397162,False,True
+lapchole_test_5025984,0028 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,6.893630480393767,False,False
+heico_test_2495458,0026 - Heico - Sigma - 7.avi,False,False,spatial_localization_camera,multiple_choice,6.1799881141632795,False,False
+heico_test_2208631,0023 - Heico - Sigma - 4.avi,False,False,multi_step_reasoning,fo_class,6.067978722974658,False,False
+heico_test_1986252,0029 - Heico - Sigma - 10.avi,False,False,temporal_localization,time,7.7281824219971895,False,False
+heico_test_2028497,0020 - Heico - Sigma - 1.avi,False,False,multi_step_reasoning,fo_class,6.066384688951075,False,False
+heico_test_2682259,0025 - Heico - Sigma - 6.avi,False,False,fo_usage_purpose,open_ended,6.668826151639223,False,False
+heico_test_2426098,0025 - Heico - Sigma - 6.avi,False,False,object_identification,fo_class,6.5790559481829405,False,False
+lapchole_test_5025971,0027 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,6.5902452217414975,False,False
+lapchole_test_5023232,0045 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.7572976239025593,False,True
+lapchole_test_607646,0017 - Laparoscopic Cholecystectomy.mp4,False,False,spatial_localization_camera,multiple_choice,7.1181787410750985,False,True
+heico_test_2602330,0028 - Heico - Sigma - 9.avi,False,False,multi_step_reasoning,fo_class,6.173779310658574,False,False
+heico_test_2604255,0028 - Heico - Sigma - 9.avi,False,False,duration_estimation,fo_class,6.6226617358624935,False,False
+heico_test_2144794,0022 - Heico - Sigma - 3.avi,False,False,temporal_ordering,open_ended,7.559851626865566,False,False
+heico_test_2125759,0021 - Heico - Sigma - 2.avi,False,False,object_aggregation,number,5.8944201013073325,False,False
+heico_test_2472689,0026 - Heico - Sigma - 7.avi,False,False,temporal_localization,time,7.224103578366339,False,True
+lapchole_test_5025975,0027 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,open_ended,3.0321555752307177,False,False
+heico_test_2439006,0026 - Heico - Sigma - 7.avi,False,False,multi_step_reasoning,fo_class,6.8710723631083965,False,True
+lapchole_test_5026246,0066 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.7396920267492533,False,True
+lapchole_test_5023026,0070 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.715510035865009,False,True
+lapchole_test_5023362,0026 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.6946804877370596,False,True
+heico_test_2330241,0024 - Heico - Sigma - 5.avi,False,False,temporal_localization,time,6.1994735999032855,False,False
+heico_test_2519424,0027 - Heico - Sigma - 8.avi,False,False,object_aggregation,number,6.996910250745714,False,False
+lapchole_test_5026214,0061 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,7.10346420481801,False,False
+lapchole_test_5023341,0028 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.712126669473946,False,True
+heico_test_2357084,0024 - Heico - Sigma - 5.avi,False,False,object_aggregation,number,7.103969853371382,False,False
+heico_test_2238694,0023 - Heico - Sigma - 4.avi,False,False,temporal_localization,time,6.898405222222209,False,False
+lapchole_test_1306940,0032 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,7.077639495022595,False,True
+lapchole_test_3147434,0078 - Laparoscopic Cholecystectomy.mp4,False,False,spatial_localization_camera,multiple_choice,7.2323334300890565,False,False
+lapchole_test_5023495,0016 - Laparoscopic Cholecystectomy.mp4,False,False,object_attributes,open_ended,2.9313999339938164,False,True
+heico_test_2443247,0026 - Heico - Sigma - 7.avi,False,False,spatial_localization_camera,multiple_choice,6.7261821972206235,False,False
+heico_test_1969680,0029 - Heico - Sigma - 10.avi,False,False,object_aggregation,number,6.5247167479246855,False,False
+lapchole_test_5025841,0004 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.6978549053892493,False,True
+lapchole_test_2511656,0061 - Laparoscopic Cholecystectomy.mp4,False,False,instance_matching,binary,6.402578643523157,False,True
+lapchole_test_1714979,0043 - Laparoscopic Cholecystectomy.mp4,False,False,object_aggregation,number,6.74871511477977,False,False
+lapchole_test_5026035,0033 - Laparoscopic Cholecystectomy.mp4,False,False,multi_step_reasoning,open_ended,0.6497531970962882,False,False
+lapchole_test_5026518,0158 - Laparoscopic Cholecystectomy.mp4,False,False,causal_consequence_reasoning,open_ended,6.866421710699797,False,False
+heico_test_2201233,0022 - Heico - Sigma - 3.avi,False,False,fo_interaction_recognition,binary,6.784731230698526,False,False
+lapchole_test_5027336,0065 - Laparoscopic Cholecystectomy.mp4,False,False,spatial_localization_camera,multiple_choice,6.0751783130690455,False,True
+heico_test_2099249,0020 - Heico - Sigma - 1.avi,False,False,fo_interaction_recognition,binary,7.078085355460644,False,False
+lapchole_test_1299238,0032 - Laparoscopic Cholecystectomy.mp4,False,False,instance_matching,binary,7.1332401083782315,False,True
+lapchole_test_3053123,0074 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,7.483307964168489,False,False
+heico_test_1990621,0029 - Heico - Sigma - 10.avi,False,False,temporal_localization,time,10.32350096385926,False,False
+lapchole_test_3211566,0079 - Laparoscopic Cholecystectomy.mp4,False,False,temporal_localization,time,6.512239831499755,False,False
+lapchole_test_5026357,0093 - Laparoscopic Cholecystectomy.mp4,False,False,fo_usage_purpose,open_ended,2.641389693133533,False,True
+lapchole_test_3039177,0074 - Laparoscopic Cholecystectomy.mp4,False,False,spatial_localization_camera,multiple_choice,6.482986202463508,False,False
+lapchole_test_5025816,0000 - Laparoscopic Cholecystectomy.mp4,False,False,object_attributes,open_ended,2.560824534855783,False,True
+heico_test_2468028,0026 - Heico - Sigma - 7.avi,False,False,temporal_ordering,binary,6.955836167559028,False,False

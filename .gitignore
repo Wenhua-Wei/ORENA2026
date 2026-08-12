@@ -14,10 +14,18 @@
 # Temporary inference outputs
 /few_shots_inference/temp/
 /few_shots_inference/temp2/
+/few_shots_inference/
 
 # InternVL model weights
 /orena-docker/segment-algorithm/resources/InternVL3_5-4B-Instruct-a3fd3158/
 /orena-docker/frame-algorithm/resources/InternVL3_5-8B-Instruct/
+/orena-docker/segment-algorithm/resources/
+
+
+/orena-docker/segment-algorithm/test/
+/orena-docker/segment-algorithm-v1/
+/predict/frame/
+
 
 # Challenge document
 /orena-docker/FINAL_TRACK-2_document.pdf
@@ -25,6 +33,8 @@
 # Saved Docker image archive
 /orena-docker/segment-algorithm/segment-algorithm_2026-07-25_05-09-09.tar.gz
 /orena-docker/frame-algorithm/frame-track_2026-07-30_13-57-12.tar.gz
+/orena-docker/segment-algorithm/saved-images/
+
 
 # macOS metadata
 .DS_Store

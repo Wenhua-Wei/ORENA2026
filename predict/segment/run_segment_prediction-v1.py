@@ -88,13 +88,13 @@ OUTPUT_DIR = (
     ORENA_ROOT
     / "predict"
     / "segment"
-    / "predictions_8B_32-SM-NEWV1"
+    / "predictions_8B_20-SMV3-test"
 )
 
-REQUESTS_PATH = PREPARED_DIR / "prepared_50_per_capability/request.json"
-SELECTED_QIDS_PATH = PREPARED_DIR / "prepared_50_per_capability/selected_qids.json"
-FO_DEFINITIONS_PATH = PREPARED_DIR / "prepared_50_per_capability/FO_definitions.json"
-PLAIN_DIR = PREPARED_DIR / "prepared_50_per_capability/overlayed"
+REQUESTS_PATH = PREPARED_DIR / "prepared_balanced_50/requests.json"
+SELECTED_QIDS_PATH = PREPARED_DIR / "prepared_balanced_50/selected_qids.json"
+FO_DEFINITIONS_PATH = PREPARED_DIR / "prepared_balanced_50/FO_definitions.json"
+PLAIN_DIR = PREPARED_DIR / "prepared_balanced_50/plain"
 
 RESPONSES_PATH = OUTPUT_DIR / "responses.json"
 INFERENCE_LOG_PATH = OUTPUT_DIR / "inference_log.csv"
@@ -115,12 +115,12 @@ DTYPE = torch.float16
 USE_FEW_SHOT_EXAMPLES = False
 
 TARGET_FPS = 1.0
-MAX_FRAMES = 32
+MAX_FRAMES = 20
 NUM_DECODE_THREADS = 1
 
 INPUT_SIZE = 448
 MAX_TILES_PER_FRAME = 1
-MAX_NEW_TOKENS = 128
+MAX_NEW_TOKENS = 64
 
 SAVE_EVERY = 10
 RETRY_FAILED_ON_RESUME = True
@@ -135,13 +135,12 @@ ALGORITHM_DIR = ALGORITHM_DIR.expanduser().resolve()
 if str(ALGORITHM_DIR) not in sys.path:
     sys.path.insert(0, str(ALGORITHM_DIR))
 
-from answer_utils import normalize_answer
+from answer_utils import extract_fo_class_names, normalize_answer
 from model_utils import InternVLInferenceEngine
 from prompt_utils import (
     build_prompt,
     build_shared_prompt,
     load_fo_definitions,
-    resolve_fo_class_names,
     seconds_to_timestamp,
 )
 from video_utils import load_clip_frames
@@ -814,19 +813,15 @@ def run() -> int:
     fo_definitions = load_fo_definitions(
         FO_DEFINITIONS_PATH
     )
-
-    fo_class_names = resolve_fo_class_names(
+    fo_class_names = extract_fo_class_names(
         fo_definitions
     )
 
-    if not fo_definitions:
-        LOG.warning(
-            "FO_definitions.json is empty. Using canonical FO class "
-            "names from the orena-focus package."
+    if not fo_class_names:
+        raise ValueError(
+            "No canonical FO classes were extracted from "
+            "FO_definitions.json."
         )
-
-
-
 
     if USE_FEW_SHOT_EXAMPLES:
         shared_prompt = build_shared_prompt(
@@ -962,25 +957,14 @@ def run() -> int:
                     relative_timestamps=clip.timestamps,
                 )
 
-#                prompt = build_prompt(
-#                    request=request,
-#                    shared_prompt=shared_prompt,
-#                )
-
-
                 prompt = build_prompt(
                     request=request,
                     shared_prompt=shared_prompt,
-                    num_frames=clip.num_frames,
-                    target_fps=TARGET_FPS,
-                    max_frames=MAX_FRAMES,
                 )
 
 
 
-
-
-#                print(prompt)
+                print(prompt)
 ######################################
 
                 prediction = engine.predict(
