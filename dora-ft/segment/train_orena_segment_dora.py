@@ -30,10 +30,6 @@ Multimodal tokenization:
     Batch size is intentionally fixed to 1 because VQAs have variable frame
     counts and therefore variable visual-token lengths.
 
-This script is written first for pipeline validation. Use --tiny-smoke to run
-three optimizer steps on the shortest few training examples before attempting
-the full 961-sample smoke set or the full 13,746-sample training set.
-
 Checkpoint contents:
     <checkpoint>/dora_adapter/       PEFT DoRA adapter
     <checkpoint>/mlp1.pt             trainable multimodal projector
@@ -170,10 +166,6 @@ class RunConfig:
     max_optimizer_steps: int | None
 
 
-# =============================================================================
-# CLI
-# =============================================================================
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -297,10 +289,7 @@ def parse_args() -> argparse.Namespace:
 
     return parser.parse_args()
 
-
-# =============================================================================
 # GENERAL HELPERS
-# =============================================================================
 
 def configure_logging() -> None:
     logging.basicConfig(
@@ -499,9 +488,7 @@ def select_records(
     return selected
 
 
-# =============================================================================
 # EXACT INTERNVL2.5/3.5 SFT TOKENIZATION
-# =============================================================================
 
 def verify_image_special_tokens(tokenizer: Any) -> dict[str, int]:
     result: dict[str, int] = {}
@@ -742,9 +729,7 @@ def tokenize_internvl2_5_sft(
     }
 
 
-# =============================================================================
 # DATA PREPARATION
-# =============================================================================
 
 class OrenaSFTDataset:
     def __init__(
@@ -2081,9 +2066,6 @@ def train(
     )
 
 
-# =============================================================================
-# MAIN
-# =============================================================================
 
 def main() -> int:
     args = parse_args()
