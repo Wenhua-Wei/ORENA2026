@@ -159,7 +159,7 @@ The datasets and videos are **not redistributed in this repository**. Please obt
 
 ## Model Weights and Checkpoints
 
-Here are the pretrained InternVL3.5-8B-Instruct weights and trained DoRA checkpoint on epoch 5: 
+Here are the pretrained InternVL3.5-8B-Instruct weights and trained DoRA checkpoint on epoch 5: https://drive.google.com/drive/folders/1wV50zkEBHCGOlZuu7pvl7nfey74nDor8?usp=sharing
 
 For local Docker builds, the required resources should be placed under the corresponding algorithm `resources/` directory.
 
