@@ -74,6 +74,7 @@ COPY --chown=user:user \
     model_utils.py \
     prompt_utils.py \
     video_utils.py \
+    sampling_utils.py \
     /opt/app/
 
 ENTRYPOINT ["python", "inference.py"]

@@ -1,16 +1,30 @@
-#!/usr/bin/env python3
 """
-Train InternVL3.5-8B on ORena SAVE FOCUS SEGMENT using DoRA + trainable mlp1.
+Train InternVL3.5-8B on ORena SAVE FOCUS SEGMENT using DoRA.
 
-Design
-------
+ORena-specific parts that cannot be
+copied literally are retained: the ORena JSONL loader, up-to-32-frame visual
+representation, Docker-aligned prompt, InternVL multimodal image-token expansion,
+and the longer sequence length needed by InternVL3.5-8B.
+
+Reference-aligned training design
+---------------------------------
 Model:
     vision_model              frozen
-    mlp1 projector            fully trainable
+    mlp1 projector            frozen
     language-model base       frozen
     language-model attention  DoRA on q_proj/k_proj/v_proj/o_proj
 
-Input:
+DoRA / optimizer defaults:
+    rank                      8
+    alpha                     16
+    dropout                   0.1
+    AdamW learning rate       2e-5
+    weight decay              0.0
+    reference batch size      6
+    ORena implementation      micro-batch 1 + gradient accumulation 6
+    LR reduction              x0.8 after 3 validation epochs without improvement
+
+ORena-specific input:
     simplified train_sft.jsonl / val_all_sft.jsonl produced by
     build_orena_segment_dora_jsonl.py
 
@@ -19,26 +33,24 @@ Visual representation:
     one visual tile per frame
     448 x 448
     ImageNet normalization
-    same `prepare_frames()` implementation as the current Docker model_utils.py
+    same prepare_frames() implementation as the current Docker model_utils.py
 
 Multimodal tokenization:
-    follows InternVL's official `internvl2_5` SFT preprocessing:
+    follows InternVL's internvl2_5 SFT serialization:
       - each <image> becomes
         <img> + <IMG_CONTEXT> * model.num_image_token + </img>
       - system and user tokens are masked with label -100
       - only assistant-answer tokens contribute to the SFT loss
-    Batch size is intentionally fixed to 1 because VQAs have variable frame
-    counts and therefore variable visual-token lengths.
-
-This script is written first for pipeline validation. Use --tiny-smoke to run
-three optimizer steps on the shortest few training examples before attempting
-the full 961-sample smoke set or the full 13,746-sample training set.
+    Batch size is fixed to 1 because ORena VQAs have variable frame counts and
+    therefore variable multimodal sequence lengths.
 
 Checkpoint contents:
     <checkpoint>/dora_adapter/       PEFT DoRA adapter
-    <checkpoint>/mlp1.pt             trainable multimodal projector
     <checkpoint>/tokenizer/          tokenizer snapshot
     <checkpoint>/training_state.json metadata needed for reload/evaluation
+
+The frozen base InternVL3.5-8B model, including its original mlp1 projector, is
+not duplicated in each checkpoint.
 """
 
 from __future__ import annotations
@@ -72,9 +84,6 @@ except ImportError as error:
     ) from error
 
 
-# =============================================================================
-# PATHS / CURRENT DOCKER PREPROCESSING
-# =============================================================================
 
 ORENA_ROOT = Path("/SAN/medic/Surgical_LLM_Agent/orena2026")
 
@@ -92,18 +101,15 @@ if not SEGMENT_ALGORITHM_DIR.is_dir():
 if str(SEGMENT_ALGORITHM_DIR) not in sys.path:
     sys.path.insert(0, str(SEGMENT_ALGORITHM_DIR))
 
-from model_utils import prepare_frames
-from prompt_utils import (
-    build_system_prompt,
-    load_fo_definitions,
-)
+# Reuse the exact 448x448/one-tile visual preprocessing used at inference.
+from model_utils import prepare_frames  # noqa: E402
 
 
 DEFAULT_DATA_ROOT = (
     ORENA_ROOT
     / "data"
     / "segment"
-    / "dora_8b_max32_smoke_4train_1test"
+    / "dora_8b_balanced640"
 )
 
 DEFAULT_OUTPUT_DIR = (
@@ -111,7 +117,7 @@ DEFAULT_OUTPUT_DIR = (
     / "segment"
     / "dora-ft"
     / "outputs"
-    / "internvl3_5_8b_dora_smoke"
+    / "balanced640-r8-a16-reference2888888"
 )
 
 MODEL_NAME = "InternVL3_5-8B-Instruct"
@@ -125,11 +131,11 @@ MODEL_PATH_CANDIDATES = (
 TRAIN_JSONL = "train_sft.jsonl"
 VAL_JSONL = "val_all_sft.jsonl"
 
-FO_DEFINITIONS_JSON = "FO_definitions.json"
-
 INPUT_SIZE = 448
 MAX_TILES_PER_FRAME = 1
 MAX_FRAMES = 32
+
+USE_SYSTEM_TURN = False
 
 IMG_START_TOKEN = "<img>"
 IMG_END_TOKEN = "</img>"
@@ -146,17 +152,12 @@ DORA_TARGET_MODULES = (
 LOG_LEVEL = logging.INFO
 
 
-# =============================================================================
-# CONFIG SNAPSHOT
-# =============================================================================
 
 @dataclass(frozen=True)
 class RunConfig:
     model_path: str
     data_root: str
     output_dir: str
-    system_message: str
-    system_message_source: str
     precision: str
     max_seq_length: int
     epochs: int
@@ -165,27 +166,24 @@ class RunConfig:
     dora_alpha: int
     dora_dropout: float
     dora_lr: float
-    mlp_lr: float
-    weight_decay_mlp: float
-    warmup_ratio: float
-    max_grad_norm: float
+    weight_decay: float
+    lr_patience: int
+    lr_shrink_factor: float
     seed: int
     use_flash_attn: bool
+    use_system_turn: bool
     tiny_smoke: bool
     max_train_samples: int | None
     max_eval_samples: int | None
     max_optimizer_steps: int | None
 
 
-# =============================================================================
-# CLI
-# =============================================================================
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Fine-tune InternVL3.5-8B for ORena SEGMENT using DoRA "
-            "on q/k/v/o projections and a trainable mlp1 projector."
+            "on language-model q/k/v/o projections, following DoRA_fine_tune.py "
+            "as closely as practical."
         )
     )
 
@@ -214,8 +212,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--precision",
         choices=("auto", "bf16", "fp16"),
-        default="auto",
-        help="Training precision. auto prefers bf16 when CUDA supports it.",
+        default="bf16",
+        help="Training precision. Default bf16 to match the reference script.",
     )
     parser.add_argument(
         "--max-seq-length",
@@ -229,25 +227,46 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--epochs",
         type=int,
-        default=1,
+        default=20,
+        help="Number of training epochs. Reference script default: 20.",
     )
     parser.add_argument(
         "--gradient-accumulation",
         type=int,
-        default=8,
-        help="Micro-samples per optimizer step. Batch size itself is always 1.",
+        default=6,
+        help=(
+            "Micro-samples per optimizer step. Physical batch size is 1; "
+            "default 6 approximates the reference script's batch_size=6."
+        ),
     )
 
     parser.add_argument("--dora-rank", type=int, default=8)
     parser.add_argument("--dora-alpha", type=int, default=16)
-    parser.add_argument("--dora-dropout", type=float, default=0.05)
+    parser.add_argument("--dora-dropout", type=float, default=0.1)
     parser.add_argument("--dora-lr", type=float, default=2e-5)
-    parser.add_argument("--mlp-lr", type=float, default=1e-5)
-    parser.add_argument("--weight-decay-mlp", type=float, default=0.01)
-    parser.add_argument("--warmup-ratio", type=float, default=0.03)
-    parser.add_argument("--max-grad-norm", type=float, default=1.0)
+    parser.add_argument(
+        "--weight-decay",
+        type=float,
+        default=0.0,
+        help="AdamW weight decay. Reference script default: 0.0.",
+    )
+    parser.add_argument(
+        "--lr-patience",
+        type=int,
+        default=3,
+        help=(
+            "Reduce LR after this many consecutive validation epochs without "
+            "improvement. Reference script default: 3."
+        ),
+    )
+    parser.add_argument(
+        "--lr-shrink-factor",
+        type=float,
+        default=0.8,
+        help="Multiply LR by this factor after patience is reached. Default: 0.8.",
+    )
 
-    parser.add_argument("--seed", type=int, default=20260812)
+    parser.add_argument("--seed", type=int, default=50)
     parser.add_argument(
         "--use-flash-attn",
         action=argparse.BooleanOptionalAction,
@@ -272,8 +291,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-eval-samples",
         type=int,
-        default=16,
-        help="Maximum validation samples for CE-loss checking. Default: 16.",
+        default=None,
+        help=(
+            "Optional cap on validation VQAs. Default None evaluates the whole "
+            "validation JSONL, matching the reference script's full validation pass."
+        ),
     )
     parser.add_argument(
         "--max-optimizer-steps",
@@ -305,9 +327,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# =============================================================================
-# GENERAL HELPERS
-# =============================================================================
 
 def configure_logging() -> None:
     logging.basicConfig(
@@ -412,51 +431,6 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
     return records
 
 
-def build_training_system_message(
-    data_root: Path,
-) -> tuple[str, str]:
-    """Build the system message used for all training/validation samples.
-
-    Prefer <data-root>/FO_definitions.json. If it is absent, pass an
-    empty definitions string so prompt_utils falls back to the canonical
-    FOType registry.
-
-    Few-shot examples are explicitly disabled.
-    """
-
-    definitions_path = (
-        data_root
-        / FO_DEFINITIONS_JSON
-    )
-
-    if definitions_path.is_file():
-        fo_definitions = load_fo_definitions(
-            definitions_path
-        )
-        source = str(
-            definitions_path
-        )
-    else:
-        fo_definitions = ""
-        source = (
-            "canonical FOType registry fallback "
-            "(FO_definitions.json not found)"
-        )
-
-    system_message = build_system_prompt(
-        fo_definitions,
-        few_shot_examples=(),
-    )
-
-    if not system_message.strip():
-        raise RuntimeError(
-            "Training system message is empty."
-        )
-
-    return system_message, source
-
-
-
 def validate_sft_record(record: dict[str, Any]) -> None:
     required = (
         "sample_id",
@@ -499,24 +473,6 @@ def validate_sft_record(record: dict[str, Any]) -> None:
 
     user_text = str(record["user_text"])
     assistant_text = str(record["assistant_text"]).strip()
-
-    old_system_text = (
-        "You are a surgical assistant analysing endoscopic video"
-    )
-
-    if old_system_text in user_text:
-        raise RuntimeError(
-            f"{sample_id}: user_text still contains the old surgical "
-            "system instructions. Rebuild the SFT JSONLs with the "
-            "updated prompt_utils.py before training."
-        )
-
-    if "Input description:" not in user_text:
-        raise RuntimeError(
-            f"{sample_id}: user_text does not contain 'Input description:'. "
-            "The SFT JSONL may not have been rebuilt with the updated "
-            "prompt_utils.py."
-        )
 
     if user_text.count("<image>") != num_frames:
         raise RuntimeError(
@@ -569,9 +525,7 @@ def select_records(
     return selected
 
 
-# =============================================================================
-# EXACT INTERNVL2.5/3.5 SFT TOKENIZATION
-# =============================================================================
+
 
 def verify_image_special_tokens(tokenizer: Any) -> dict[str, int]:
     result: dict[str, int] = {}
@@ -812,9 +766,6 @@ def tokenize_internvl2_5_sft(
     }
 
 
-# =============================================================================
-# DATA PREPARATION
-# =============================================================================
 
 class OrenaSFTDataset:
     def __init__(
@@ -942,9 +893,6 @@ class OrenaSFTDataset:
         }
 
 
-# =============================================================================
-# MODEL / DORA
-# =============================================================================
 
 def load_model_and_tokenizer(
     *,
@@ -984,6 +932,7 @@ def load_model_and_tokenizer(
         use_flash_attn=use_flash_attn,
         trust_remote_code=True,
         local_files_only=True,
+        device_map="cuda",
     )
 
     if not hasattr(
@@ -1100,7 +1049,7 @@ def detect_target_modules(
     return matched
 
 
-def configure_dora_and_projector(
+def configure_dora(
     *,
     model: Any,
     rank: int,
@@ -1133,6 +1082,8 @@ def configure_dora_and_projector(
         len(matched_targets),
     )
 
+    # freeze the complete InternVL model first, then
+    # attach DoRA only to the language model. vision_model and mlp1 stay frozen.
     freeze_everything(model)
 
     lora_config = LoraConfig(
@@ -1156,23 +1107,16 @@ def configure_dora_and_projector(
         )
     )
 
-    # InternVL's own LoRA wrapping enables input gradients after PEFT wrapping.
     if hasattr(
         model.language_model,
         "enable_input_require_grads",
     ):
         model.language_model.enable_input_require_grads()
 
-    # Projector is fully trainable.
-    for parameter in (
-        model.mlp1.parameters()
-    ):
-        parameter.requires_grad = True
+    for parameter in model.mlp1.parameters():
+        parameter.requires_grad = False
 
-    # Vision stays frozen.
-    for parameter in (
-        model.vision_model.parameters()
-    ):
+    for parameter in model.vision_model.parameters():
         parameter.requires_grad = False
 
     if hasattr(
@@ -1215,21 +1159,11 @@ def count_parameters(
 
 def collect_optimizer_parameters(
     model: Any,
-) -> tuple[
-    list[nn.Parameter],
-    list[nn.Parameter],
-]:
+) -> list[nn.Parameter]:
     dora_params = [
         parameter
         for parameter
         in model.language_model.parameters()
-        if parameter.requires_grad
-    ]
-
-    mlp_params = [
-        parameter
-        for parameter
-        in model.mlp1.parameters()
         if parameter.requires_grad
     ]
 
@@ -1238,12 +1172,7 @@ def collect_optimizer_parameters(
             "No trainable DoRA language-model parameters found."
         )
 
-    if not mlp_params:
-        raise RuntimeError(
-            "No trainable mlp1 parameters found."
-        )
-
-    return dora_params, mlp_params
+    return dora_params
 
 
 def verify_trainable_scope(
@@ -1260,15 +1189,14 @@ def verify_trainable_scope(
         name
         for name in trainable_names
         if (
-            "mlp1" not in name
-            and "lora_" not in name
+            "lora_" not in name
             and "magnitude" not in name.lower()
         )
     ]
 
     if unexpected:
         raise RuntimeError(
-            "Unexpected trainable parameters outside mlp1/DoRA:\n  - "
+            "Unexpected trainable parameters outside DoRA:\n  - "
             + "\n  - ".join(
                 unexpected[:100]
             )
@@ -1289,129 +1217,86 @@ def verify_trainable_scope(
             )
         )
 
+    mlp_trainable = [
+        name
+        for name, parameter
+        in model.mlp1.named_parameters()
+        if parameter.requires_grad
+    ]
+
+    if mlp_trainable:
+        raise RuntimeError(
+            "mlp1 is not fully frozen:\n  - "
+            + "\n  - ".join(
+                mlp_trainable[:50]
+            )
+        )
+
     logging.info(
-        "Trainable scope verified: only mlp1 + DoRA parameters."
+        "Trainable scope verified: DoRA only; vision_model and mlp1 are frozen."
     )
 
 
 # =============================================================================
-# OPTIMIZER / SCHEDULER
+# OPTIMIZER / REFERENCE-STYLE LR REDUCTION
 # =============================================================================
 
 def build_optimizer(
     *,
     model: Any,
     dora_lr: float,
-    mlp_lr: float,
-    weight_decay_mlp: float,
+    weight_decay: float,
 ) -> torch.optim.Optimizer:
-    dora_params, mlp_params = (
-        collect_optimizer_parameters(
-            model
-        )
+    dora_params = collect_optimizer_parameters(
+        model
     )
 
     logging.info(
         "Trainable DoRA parameters: %s",
         f"{count_parameters(dora_params):,}",
     )
-    logging.info(
-        "Trainable mlp1 parameters: %s",
-        f"{count_parameters(mlp_params):,}",
-    )
 
     optimizer = torch.optim.AdamW(
-        [
-            {
-                "params": dora_params,
-                "lr": dora_lr,
-                "weight_decay": 0.0,
-                "name": "dora",
-            },
-            {
-                "params": mlp_params,
-                "lr": mlp_lr,
-                "weight_decay": (
-                    weight_decay_mlp
-                ),
-                "name": "mlp1",
-            },
-        ],
-        betas=(0.9, 0.999),
-        eps=1e-8,
+        dora_params,
+        lr=dora_lr,
+        weight_decay=weight_decay,
     )
 
     return optimizer
 
 
-def build_scheduler(
-    *,
+def adjust_learning_rate(
     optimizer: torch.optim.Optimizer,
-    total_steps: int,
-    warmup_ratio: float,
-) -> torch.optim.lr_scheduler.LambdaLR:
-    if total_steps <= 0:
+    shrink_factor: float,
+) -> None:
+    if not (0.0 < shrink_factor < 1.0):
         raise ValueError(
-            "total_steps must be positive."
+            f"lr_shrink_factor must be in (0, 1), got {shrink_factor}."
         )
 
-    warmup_steps = int(
-        round(
-            total_steps
-            * warmup_ratio
-        )
-    )
+    old_lrs = [
+        float(group["lr"])
+        for group in optimizer.param_groups
+    ]
 
-    def lr_lambda(step: int) -> float:
-        if (
-            warmup_steps > 0
-            and step < warmup_steps
-        ):
-            return float(
-                step + 1
-            ) / float(
-                warmup_steps
-            )
+    for group in optimizer.param_groups:
+        group["lr"] = float(
+            group["lr"]
+        ) * shrink_factor
 
-        if total_steps <= warmup_steps:
-            return 1.0
+    new_lrs = [
+        float(group["lr"])
+        for group in optimizer.param_groups
+    ]
 
-        progress = (
-            step - warmup_steps
-        ) / float(
-            max(
-                1,
-                total_steps - warmup_steps,
-            )
-        )
-
-        progress = min(
-            max(
-                progress,
-                0.0,
-            ),
-            1.0,
-        )
-
-        return 0.5 * (
-            1.0
-            + math.cos(
-                math.pi
-                * progress
-            )
-        )
-
-    return (
-        torch.optim.lr_scheduler.LambdaLR(
-            optimizer,
-            lr_lambda,
-        )
+    logging.info(
+        "DECAYING learning rate by factor %.3f: %s -> %s",
+        shrink_factor,
+        old_lrs,
+        new_lrs,
     )
 
 
-# =============================================================================
-# DEVICE / FORWARD
-# =============================================================================
 
 def move_batch_to_device(
     batch: dict[str, Any],
@@ -1513,14 +1398,6 @@ def forward_loss(
 def verify_first_backward(
     model: Any,
 ) -> None:
-    mlp_gradients = [
-        parameter.grad
-        for parameter
-        in model.mlp1.parameters()
-        if parameter.requires_grad
-        and parameter.grad is not None
-    ]
-
     dora_gradients = [
         parameter.grad
         for parameter
@@ -1529,31 +1406,22 @@ def verify_first_backward(
         and parameter.grad is not None
     ]
 
-    if not mlp_gradients:
-        raise RuntimeError(
-            "First backward produced no gradient for mlp1."
-        )
-
     if not dora_gradients:
         raise RuntimeError(
             "First backward produced no gradient for DoRA parameters."
         )
 
-    for group_name, gradients in (
-        ("mlp1", mlp_gradients),
-        ("DoRA", dora_gradients),
+    if not all(
+        bool(
+            torch.isfinite(
+                gradient
+            ).all()
+        )
+        for gradient in dora_gradients
     ):
-        if not all(
-            bool(
-                torch.isfinite(
-                    gradient
-                ).all()
-            )
-            for gradient in gradients
-        ):
-            raise FloatingPointError(
-                f"Non-finite gradient detected in {group_name}."
-            )
+        raise FloatingPointError(
+            "Non-finite gradient detected in DoRA parameters."
+        )
 
     vision_grads = [
         name
@@ -1570,15 +1438,27 @@ def verify_first_backward(
             )
         )
 
+    mlp_grads = [
+        name
+        for name, parameter
+        in model.mlp1.named_parameters()
+        if parameter.grad is not None
+    ]
+
+    if mlp_grads:
+        raise RuntimeError(
+            "Frozen mlp1 unexpectedly has gradients:\n  - "
+            + "\n  - ".join(
+                mlp_grads[:50]
+            )
+        )
+
     logging.info(
-        "First backward check PASSED: mlp1 and DoRA have finite gradients; "
-        "vision remains frozen."
+        "First backward check PASSED: DoRA has finite gradients; "
+        "vision_model and mlp1 remain frozen."
     )
 
 
-# =============================================================================
-# VALIDATION
-# =============================================================================
 
 @torch.no_grad()
 def evaluate_loss(
@@ -1646,18 +1526,6 @@ def evaluate_loss(
     return mean_loss
 
 
-# =============================================================================
-# CHECKPOINTING
-# =============================================================================
-
-def cpu_state_dict(
-    module: nn.Module,
-) -> dict[str, torch.Tensor]:
-    return {
-        key: value.detach().cpu()
-        for key, value
-        in module.state_dict().items()
-    }
 
 
 def save_checkpoint(
@@ -1692,13 +1560,6 @@ def save_checkpoint(
         safe_serialization=True,
     )
 
-    torch.save(
-        cpu_state_dict(
-            model.mlp1
-        ),
-        checkpoint_dir
-        / "mlp1.pt",
-    )
 
     tokenizer.save_pretrained(
         str(
@@ -1766,9 +1627,7 @@ def save_checkpoint(
     return checkpoint_dir
 
 
-# =============================================================================
-# TRAINING
-# =============================================================================
+
 
 def train(
     *,
@@ -1787,10 +1646,7 @@ def train(
     optimizer = build_optimizer(
         model=model,
         dora_lr=args.dora_lr,
-        mlp_lr=args.mlp_lr,
-        weight_decay_mlp=(
-            args.weight_decay_mlp
-        ),
+        weight_decay=args.weight_decay,
     )
 
     steps_per_epoch = math.ceil(
@@ -1809,17 +1665,6 @@ def train(
             max_optimizer_steps,
         )
 
-    scheduler = build_scheduler(
-        optimizer=optimizer,
-        total_steps=max(
-            1,
-            planned_steps,
-        ),
-        warmup_ratio=(
-            args.warmup_ratio
-        ),
-    )
-
     scaler = torch.amp.GradScaler(
         "cuda",
         enabled=(
@@ -1832,6 +1677,61 @@ def train(
     first_backward_checked = False
     stopped_early = False
 
+    # best-model selection by validation loss and reduce LR by a fixed factor after a patience window without improvement.
+    best_val_loss = float("inf")
+    epochs_no_improve = 0
+    best_checkpoint: Path | None = None
+
+    mean_train_loss: float | None = None
+    val_loss: float | None = None
+    epoch = 0
+
+
+    # -------------------------------------------------------------------------
+    # Pre-training validation: epoch 0
+    # -------------------------------------------------------------------------
+    baseline_val_loss: float | None = None
+
+    if (
+        not args.skip_eval
+        and val_dataset is not None
+        and len(val_dataset) > 0
+    ):
+        baseline_val_indices = list(
+            range(len(val_dataset))
+        )
+
+        if max_eval_samples is not None:
+            baseline_val_indices = baseline_val_indices[
+                :max_eval_samples
+            ]
+
+        logging.info(
+            "Evaluating pre-training CE loss on %d validation sample(s)...",
+            len(baseline_val_indices),
+        )
+
+        baseline_val_loss = evaluate_loss(
+            model=model,
+            dataset=val_dataset,
+            indices=baseline_val_indices,
+            device=device,
+            dtype=dtype,
+        )
+
+        logging.info(
+            "epoch=0 train_loss=None validation_loss=%.6f lr=%.3e",
+            baseline_val_loss,
+            float(
+                optimizer.param_groups[0]["lr"]
+            ),
+        )
+    else:
+        logging.info(
+            "Pre-training validation skipped."
+        )
+
+
     for epoch_index in range(
         args.epochs
     ):
@@ -1839,6 +1739,7 @@ def train(
 
         model.train()
         model.vision_model.eval()
+        model.mlp1.eval()
 
         epoch_indices = list(
             range(
@@ -1955,6 +1856,8 @@ def train(
                         raw_loss_value
                     )
 
+                    # Physical batch size is 1; averaging six micro-sample losses
+                    # approximates the reference script's batch_size=6 update.
                     scaled_loss = (
                         loss
                         / len(
@@ -2000,23 +1903,10 @@ def train(
                 )
                 first_backward_checked = True
 
-            torch.nn.utils.clip_grad_norm_(
-                [
-                    parameter
-                    for parameter
-                    in model.parameters()
-                    if parameter.requires_grad
-                ],
-                max_norm=(
-                    args.max_grad_norm
-                ),
-            )
-
             scaler.step(
                 optimizer
             )
             scaler.update()
-            scheduler.step()
 
             global_step += 1
 
@@ -2037,23 +1927,21 @@ def train(
                 - group_started
             )
 
-            dora_lr = optimizer.param_groups[
-                0
-            ]["lr"]
-            mlp_lr = optimizer.param_groups[
-                1
-            ]["lr"]
+            current_lr = float(
+                optimizer.param_groups[
+                    0
+                ]["lr"]
+            )
 
             logging.info(
                 "optimizer_step=%d/%d epoch=%d "
-                "loss=%.6f dora_lr=%.3e mlp_lr=%.3e "
+                "loss=%.6f lr=%.3e "
                 "peak_mem=%.2fGB step_time=%.1fs",
                 global_step,
                 planned_steps,
                 epoch,
                 group_loss,
-                dora_lr,
-                mlp_lr,
+                current_lr,
                 peak_memory_gb,
                 elapsed,
             )
@@ -2065,9 +1953,7 @@ def train(
             else None
         )
 
-        val_loss: float | None = (
-            None
-        )
+        val_loss = None
 
         if (
             not args.skip_eval
@@ -2103,31 +1989,110 @@ def train(
             )
 
             logging.info(
-                "epoch=%d validation_loss=%.6f",
+                "epoch=%d train_loss=%s validation_loss=%.6f lr=%.3e",
                 epoch,
+                (
+                    "None"
+                    if mean_train_loss is None
+                    else f"{mean_train_loss:.6f}"
+                ),
                 val_loss,
+                float(
+                    optimizer.param_groups[
+                        0
+                    ]["lr"]
+                ),
             )
 
-        save_checkpoint(
-            model=model,
-            tokenizer=tokenizer,
-            output_dir=Path(
-                run_config.output_dir
-            ),
-            checkpoint_name=(
-                f"checkpoint-epoch-{epoch}"
-            ),
-            run_config=run_config,
-            global_step=global_step,
-            epoch=epoch,
-            train_loss=(
-                mean_train_loss
-            ),
-            val_loss=val_loss,
-        )
+            improved = (
+                val_loss
+                < best_val_loss
+            )
+
+            if improved:
+                best_val_loss = val_loss
+                epochs_no_improve = 0
+
+                best_checkpoint = save_checkpoint(
+                    model=model,
+                    tokenizer=tokenizer,
+                    output_dir=Path(
+                        run_config.output_dir
+                    ),
+                    checkpoint_name="best",
+                    run_config=run_config,
+                    global_step=global_step,
+                    epoch=epoch,
+                    train_loss=(
+                        mean_train_loss
+                    ),
+                    val_loss=val_loss,
+                )
+
+                logging.info(
+                    "Best model updated at epoch %d: validation_loss=%.6f",
+                    epoch,
+                    best_val_loss,
+                )
+            else:
+                epochs_no_improve += 1
+
+                logging.info(
+                    "Validation did not improve: %d/%d epoch(s) without improvement.",
+                    epochs_no_improve,
+                    args.lr_patience,
+                )
+
+                if (
+                    epochs_no_improve
+                    >= args.lr_patience
+                ):
+                    adjust_learning_rate(
+                        optimizer,
+                        args.lr_shrink_factor,
+                    )
+                    epochs_no_improve = 0
+
+        else:
+            logging.info(
+                "Validation skipped for epoch %d.",
+                epoch,
+            )
+
+
+        if not stopped_early:
+            epoch_checkpoint = save_checkpoint(
+                model=model,
+                tokenizer=tokenizer,
+                output_dir=Path(
+                    run_config.output_dir
+                ),
+                checkpoint_name=(
+                    f"checkpoint-epoch-{epoch}"
+                ),
+                run_config=run_config,
+                global_step=global_step,
+                epoch=epoch,
+                train_loss=mean_train_loss,
+                val_loss=val_loss,
+            )
+
+            logging.info(
+                "Saved epoch %d checkpoint: %s",
+                epoch,
+                epoch_checkpoint,
+            )
+        else:
+            logging.info(
+                "Epoch %d stopped before completion; "
+                "not saving it as a completed epoch checkpoint.",
+                epoch,
+            )
+
 
         if stopped_early:
             break
+
 
     save_checkpoint(
         model=model,
@@ -2145,15 +2110,24 @@ def train(
         val_loss=val_loss,
     )
 
+    if best_checkpoint is not None:
+        logging.info(
+            "Best checkpoint: %s (validation_loss=%.6f)",
+            best_checkpoint,
+            best_val_loss,
+        )
+    elif not args.skip_eval:
+        logging.warning(
+            "No best checkpoint was created. Check validation configuration."
+        )
+
     logging.info(
         "Training finished at optimizer step %d.",
         global_step,
     )
 
 
-# =============================================================================
-# MAIN
-# =============================================================================
+
 
 def main() -> int:
     args = parse_args()
@@ -2172,6 +2146,16 @@ def main() -> int:
     if args.gradient_accumulation <= 0:
         raise ValueError(
             "--gradient-accumulation must be positive."
+        )
+
+    if args.lr_patience <= 0:
+        raise ValueError(
+            "--lr-patience must be positive."
+        )
+
+    if not (0.0 < args.lr_shrink_factor < 1.0):
+        raise ValueError(
+            "--lr-shrink-factor must be in (0, 1)."
         )
 
     if args.max_seq_length <= 0:
@@ -2201,34 +2185,16 @@ def main() -> int:
         .resolve()
     )
 
-    if not data_root.is_dir():
-        raise FileNotFoundError(
-            f"Data root does not exist: {data_root}"
-        )
-
-    system_message, system_message_source = (
-        build_training_system_message(
-            data_root
-        )
-    )
-
-    logging.info(
-        "Training system-message source: %s",
-        system_message_source,
-    )
-
-    # logging.info(
-    #     "Training system message: %r",
-    #     system_message,
-    # )
-
     output_dir = (
         args.output_dir
         .expanduser()
         .resolve()
     )
 
-
+    if not data_root.is_dir():
+        raise FileNotFoundError(
+            f"Data root does not exist: {data_root}"
+        )
 
     if (
         output_dir.exists()
@@ -2406,25 +2372,25 @@ def main() -> int:
         )
     )
 
-    base_system_message = getattr(
-        model,
-        "system_message",
-        None,
+    # ORena no-system-turn training.
+    # The full task instruction is already contained in user_text.
+    system_message = (
+        getattr(model, "system_message", None)
+        if USE_SYSTEM_TURN
+        else None
     )
 
     logging.info(
-        "Original InternVL system message: %r",
-        base_system_message,
+        "Use system turn for training: %s",
+        USE_SYSTEM_TURN,
     )
-
-    model.system_message = system_message
 
     logging.info(
-        "Using ORena surgical system message: %r",
-        model.system_message,
+        "Training system message: %r",
+        system_message,
     )
 
-    configure_dora_and_projector(
+    configure_dora(
         model=model,
         rank=args.dora_rank,
         alpha=args.dora_alpha,
@@ -2438,14 +2404,27 @@ def main() -> int:
         model
     )
 
+    logging.info(
+        "About to move complete PEFT-wrapped InternVL model to %s...",
+        device,
+    )
+
+    move_started = time.monotonic()
+
     model = model.to(
         device
     )
 
-    # Keep the frozen vision tower deterministic while the projector and DoRA
-    # adapters train.
+    torch.cuda.synchronize()
+
+    logging.info(
+        "Model move to GPU completed in %.2f s",
+        time.monotonic() - move_started,
+    )
+
+    # Reference-aligned DoRA-only training: vision_model and mlp1 stay frozen.
     model.vision_model.eval()
-    model.mlp1.train()
+    model.mlp1.eval()
     model.language_model.train()
 
     train_dataset = OrenaSFTDataset(
@@ -2552,8 +2531,6 @@ def main() -> int:
         output_dir=str(
             output_dir
         ),
-        system_message=system_message,
-        system_message_source=system_message_source,
         precision=(
             resolved_precision
         ),
@@ -2576,22 +2553,20 @@ def main() -> int:
         dora_lr=(
             args.dora_lr
         ),
-        mlp_lr=(
-            args.mlp_lr
+        weight_decay=(
+            args.weight_decay
         ),
-        weight_decay_mlp=(
-            args.weight_decay_mlp
+        lr_patience=(
+            args.lr_patience
         ),
-        warmup_ratio=(
-            args.warmup_ratio
-        ),
-        max_grad_norm=(
-            args.max_grad_norm
+        lr_shrink_factor=(
+            args.lr_shrink_factor
         ),
         seed=args.seed,
         use_flash_attn=(
             args.use_flash_attn
         ),
+        use_system_turn=USE_SYSTEM_TURN,
         tiny_smoke=(
             args.tiny_smoke
         ),

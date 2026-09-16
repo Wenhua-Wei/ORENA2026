@@ -1,13 +1,10 @@
 FROM --platform=linux/amd64 \
     pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime \
-    AS frame-algorithm-amd64
+    AS procedure-algorithm-amd64
 
-# FROM --platform=linux/amd64 \
+#FROM --platform=linux/amd64 \
 #    pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime \
-#    AS frame-algorithm-amd64
-
-# FROM --platform=linux/amd64 pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime AS frame-algorithm-amd64
-
+#    AS procedure-algorithm-amd64
 
 
 ENV PYTHONUNBUFFERED=1 \
@@ -66,44 +63,16 @@ RUN python -m pip install \
     --no-color \
     --requirement /opt/app/requirements.txt
 
-# RUN python -m pip install \
-#     --user \
-#     --break-system-packages \
-#     --no-cache-dir \
-#     --no-color \
-#     --requirement /opt/app/requirements.txt
 
-
-# RUN python -c "import torch; \
-# flags = torch._C._cuda_getArchFlags() or ''; \
-# cuda = torch.version.cuda or ''; \
-# print('torch', torch.__version__, '| cuda', cuda, '|', flags); \
-# assert cuda.startswith('12.8'), 'torch was replaced by a CUDA ' + cuda + ' build; the L40S driver cannot run it'; \
-# assert 'sm_120' in flags and 'sm_86' in flags, 'torch build misses a required GPU architecture: ' + repr(flags)"
-
-# RUN python -c "import torch; \
-# flags = torch._C._cuda_getArchFlags() or ''; \
-# cuda = torch.version.cuda or ''; \
-# print('torch', torch.__version__, '| cuda', cuda, '|', flags); \
-# assert cuda.startswith('12.4'), 'torch was replaced by a CUDA ' + cuda + ' build'"
-
-# RUN python -c "import torch; \
-# flags = torch._C._cuda_getArchFlags() or ''; \
-# cuda = torch.version.cuda or ''; \
-# print('torch', torch.__version__, '| cuda', cuda, '|', flags); \
-# assert cuda.startswith('12.8'), 'torch was replaced by a CUDA ' + cuda + ' build; the L40S driver cannot run it'; \
-# assert 'sm_86' in flags, 'torch build misses the L40S (sm_86) kernels: ' + repr(flags)"
-
-RUN python -c "import torch; \
+RUN python -c "import torch, torchvision; \
 flags = torch._C._cuda_getArchFlags() or ''; \
 cuda = torch.version.cuda or ''; \
-print('torch', torch.__version__, '| cuda', cuda, '|', flags); \
-assert cuda.startswith('12.8'), 'torch was replaced by a CUDA ' + cuda + ' build'; \
-assert 'sm_86' in flags and 'sm_120' in flags, \
-'torch build misses a required GPU architecture: ' + repr(flags)"
+print('torch', torch.__version__, '| torchvision', torchvision.__version__, '| cuda', cuda, '|', flags); \
+assert torch.__version__.startswith('2.7.'), 'unexpected torch version: ' + torch.__version__; \
+assert cuda.startswith('12.8'), 'unexpected CUDA build: ' + cuda; \
+assert 'sm_90' in flags, 'torch build misses H100 architecture sm_90: ' + repr(flags)"
 
-# The complete local InternVL snapshot is stored under resources/.
-# Its approximately 8.9 GB size is below the 50 GB per-layer limit.
+
 COPY --chown=user:user resources/ /opt/app/resources/
 
 # Copy the Docker entrypoint and reusable inference utilities.
@@ -112,7 +81,7 @@ COPY --chown=user:user \
     answer_utils.py \
     model_utils.py \
     prompt_utils.py \
-    image_utils.py \
+    video_utils.py \
     /opt/app/
 
 ENTRYPOINT ["python", "inference.py"]

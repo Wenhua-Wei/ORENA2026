@@ -1,4 +1,5 @@
 orena-focus==0.3.4
+decord==0.6.0
 
 transformers==4.52.1
 accelerate==1.14.0

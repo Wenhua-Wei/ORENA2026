@@ -1,7 +1,7 @@
 """InternVL3.5 model utilities for local ORena FOCUS experiments.
 
 This module:
-1. loads OpenGVLab/InternVL3_5-4B-Instruct once;
+1. loads OpenGVLab/InternVL3_5-8B-Instruct once;
 2. converts a list of RGB PIL frames into InternVL visual tensors;
 3. runs deterministic multi-frame inference; and
 4. returns the raw generated answer.
@@ -592,7 +592,7 @@ def main() -> None:
     default_model_path = (
         Path(__file__).resolve().parent
         / "resources"
-        / "InternVL3_5-4B-Instruct-a3fd3158"
+        / "InternVL3_5-8B-Instruct"
     )
 
     model_path = Path(

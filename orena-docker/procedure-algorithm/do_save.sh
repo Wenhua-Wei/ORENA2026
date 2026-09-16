@@ -4,7 +4,7 @@ set -eo pipefail
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-DOCKER_IMAGE_TAG="frame-algorithm"
+DOCKER_IMAGE_TAG="procedure-algorithm"
 
 echo "=+= (Re)build the container"
 source "${SCRIPT_DIR}/do_build.sh"
@@ -48,3 +48,4 @@ else
 fi
 echo "Container image saved as ${output_filename}"
 echo "==+=="
+

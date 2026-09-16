@@ -1,85 +1,117 @@
-"""ORena SAVE FOCUS — FRAME Track — InternVL3.5 inference.
+"""ORena SAVE FOCUS — FRAME Track — InternVL3.5 + DoRA inference.
 
-One container run receives a batch of ``focus.Request`` objects in
-``/input/request.json``. Each request has one still image at
-``/input/frames/<qID>.png``.
+Docker/platform mode reads a batch of ``focus.Request`` objects from
+``/input/request.json`` and writes ``/output/answer.json``.
 
-The model, tokenizer, foreign-object definitions, and shared zero-shot prompt
-are loaded once per batch. One ``focus.Response`` is written for every request.
+Direct local mode (``python inference.py``) automatically reads the committed
+sample batch from ``test/input/interface_1`` and writes to
+``test/output/interface_1``. Paths can also be overridden with
+``FOCUS_INPUT_PATH`` and ``FOCUS_OUTPUT_PATH``.
+
+Each FRAME request has one still image at ``frames/<qID>.png``. The supplied
+image corresponds to ``request.start_time`` in the original procedure. This
+implementation labels the visual input as, for example:
+
+    Image at 00:09:39: <image>
+
+so questions that explicitly mention a timepoint are unambiguously tied to the
+single supplied FRAME image.
+
+The InternVL3.5-8B base model, tokenizer, DoRA adapter, canonical foreign-object
+class names, and shared prompt are loaded once per batch. One ``focus.Response``
+is written for every request.
+
+IMPORTANT:
+    This file expects ``model_utils.InternVLInferenceEngine.predict`` to accept
+    an optional keyword argument ``image_label`` and to serialize the image as
+    ``Image at <image_label>: <image>`` when that argument is provided.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 from pathlib import Path
 from typing import Sequence
 
-import torch
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault(
+    "PYTORCH_CUDA_ALLOC_CONF",
+    "expandable_segments:True",
+)
 
+import torch
+from peft import PeftModel
 from focus import Request, Response, load_requests, save_items
 
-from answer_utils import extract_fo_class_names, normalize_answer
+from answer_utils import normalize_answer
 from image_utils import load_frame
 from model_utils import InternVLInferenceEngine
 from prompt_utils import (
     build_prompt,
     build_shared_prompt,
     load_fo_definitions,
+    resolve_fo_class_names,
 )
-
-
-# =============================================================================
-# Paths
-# =============================================================================
 
 APP_PATH = Path(__file__).resolve().parent
 
-DOCKER_INPUT_PATH = Path("/input")
-DOCKER_OUTPUT_PATH = Path("/output")
 
-LOCAL_INPUT_PATH = (
-    APP_PATH
-    / "test"
-    / "input"
-    / "interface_1"
-)
+def resolve_io_paths() -> tuple[Path, Path, str]:
+    """Resolve input/output paths for Docker or direct local execution."""
 
-LOCAL_OUTPUT_PATH = (
-    APP_PATH
-    / "test"
-    / "output"
-    / "interface_1"
-)
+    env_input = os.environ.get("FOCUS_INPUT_PATH")
+    env_output = os.environ.get("FOCUS_OUTPUT_PATH")
 
-# Inside Docker, /input/request.json is mounted by the platform.
-# Otherwise, use the committed local test batch.
-if (DOCKER_INPUT_PATH / "request.json").is_file():
-    INPUT_PATH = DOCKER_INPUT_PATH
-    OUTPUT_PATH = DOCKER_OUTPUT_PATH
-    EXECUTION_MODE = "docker"
-else:
-    INPUT_PATH = LOCAL_INPUT_PATH
-    OUTPUT_PATH = LOCAL_OUTPUT_PATH
-    EXECUTION_MODE = "local"
+    if env_input or env_output:
+        if not env_input or not env_output:
+            raise ValueError(
+                "Set both FOCUS_INPUT_PATH and FOCUS_OUTPUT_PATH, or neither."
+            )
+        return (
+            Path(env_input).expanduser().resolve(),
+            Path(env_output).expanduser().resolve(),
+            "environment",
+        )
+
+    if Path("/.dockerenv").exists() or Path("/input/request.json").is_file():
+        return Path("/input"), Path("/output"), "docker"
+
+    return (
+        APP_PATH / "test" / "input" / "interface_1",
+        APP_PATH / "test" / "output" / "interface_1",
+        "local",
+    )
+
+
+INPUT_PATH, OUTPUT_PATH, EXECUTION_MODE = resolve_io_paths()
 
 REQUESTS_PATH = INPUT_PATH / "request.json"
 FO_DEFINITIONS_PATH = INPUT_PATH / "FO_definitions.json"
 FRAME_DIR = INPUT_PATH / "frames"
 
-MODEL_PATH = (
+MODEL_PATH = APP_PATH / "resources" / "InternVL3_5-8B-Instruct"
+
+_DEFAULT_DORA_ADAPTER_PATH = (
     APP_PATH
     / "resources"
-    / "InternVL3_5-8B-Instruct"
+    / "checkpoint-epoch-4"
+    / "dora_adapter"
 )
 
-
-# =============================================================================
-# Inference configuration
-# =============================================================================
+DORA_ADAPTER_PATH = Path(
+    os.environ.get(
+        "FRAME_DORA_ADAPTER_PATH",
+        str(_DEFAULT_DORA_ADAPTER_PATH),
+    )
+).expanduser().resolve()
 
 USE_FEW_SHOT_EXAMPLES = False
+USE_SYSTEM_TURN = False
 
 DEVICE = "cuda:0"
 DTYPE = torch.float16
@@ -88,16 +120,7 @@ INPUT_SIZE = 448
 MAX_TILES_PER_IMAGE = 4
 USE_THUMBNAIL = True
 MAX_NEW_TOKENS = 64
-
-# Useful during development. Disable for the final submission if profiling
-# shows that CUDA synchronization and peak-memory collection add meaningful
-# latency.
 COLLECT_GPU_DIAGNOSTICS = False
-
-
-# =============================================================================
-# Logging
-# =============================================================================
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -105,13 +128,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-
 log = logging.getLogger(__name__)
-
-
-# =============================================================================
-# Helpers
-# =============================================================================
 
 
 def frame_path_for(request: Request) -> Path:
@@ -120,20 +137,34 @@ def frame_path_for(request: Request) -> Path:
     return FRAME_DIR / f"{request.qID}.png"
 
 
+def seconds_to_timestamp(seconds: float) -> str:
+    """Convert procedure seconds to HH:MM:SS using the floored second."""
+
+    seconds = float(seconds)
+    if seconds < 0:
+        raise ValueError(
+            f"Frame timestamp must be non-negative, received {seconds}."
+        )
+
+    total_seconds = int(seconds)
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    secs = total_seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def image_label_for(request: Request) -> str:
+    """Return the original-procedure timestamp corresponding to the FRAME image."""
+
+    return seconds_to_timestamp(float(request.start_time))
+
+
 def build_shared_inference_prompt(
     fo_definitions: str,
 ) -> tuple[str, tuple[str, ...]]:
     """Build the shared prompt and canonical FO-class list once per batch."""
 
-    fo_class_names = extract_fo_class_names(
-        fo_definitions
-    )
-
-    if not fo_class_names:
-        raise ValueError(
-            "No foreign-object class names could be extracted from "
-            "FO_definitions.json."
-        )
+    fo_class_names = resolve_fo_class_names(fo_definitions)
 
     if USE_FEW_SHOT_EXAMPLES:
         shared_prompt = build_shared_prompt(
@@ -151,22 +182,36 @@ def build_shared_inference_prompt(
 def validate_requests(
     requests: Sequence[Request],
 ) -> None:
-    """Check that the batch contains unique, non-empty qIDs."""
+    """Validate basic FRAME request invariants."""
 
-    qids = [
-        str(request.qID).strip()
-        for request in requests
-    ]
+    qids = [str(request.qID).strip() for request in requests]
 
     if any(not qid for qid in qids):
-        raise ValueError(
-            "Every request must contain a non-empty qID."
-        )
+        raise ValueError("Every request must contain a non-empty qID.")
 
     if len(qids) != len(set(qids)):
-        raise ValueError(
-            "request.json contains duplicate qIDs."
-        )
+        raise ValueError("request.json contains duplicate qIDs.")
+
+    for request in requests:
+        if not request.question.strip():
+            raise ValueError(
+                f"qID={request.qID} has an empty question."
+            )
+
+        if float(request.start_time) < 0:
+            raise ValueError(
+                f"qID={request.qID} has negative start_time="
+                f"{request.start_time}."
+            )
+
+        if float(request.end_time) != float(request.start_time):
+            log.warning(
+                "FRAME qID=%s has start_time=%s and end_time=%s; "
+                "using start_time as the supplied image timestamp.",
+                request.qID,
+                request.start_time,
+                request.end_time,
+            )
 
 
 def ordered_responses(
@@ -202,17 +247,65 @@ def save_responses(
     )
 
 
+def attach_dora_adapter(
+    engine: InternVLInferenceEngine,
+    adapter_path: Path,
+) -> None:
+    """Attach the fine-tuned FRAME DoRA adapter to InternVL's language model."""
+
+    if not adapter_path.is_dir():
+        raise FileNotFoundError(
+            f"DoRA adapter directory does not exist: {adapter_path}"
+        )
+
+    adapter_config = adapter_path / "adapter_config.json"
+
+    if not adapter_config.is_file():
+        raise FileNotFoundError(
+            f"Missing DoRA adapter config: {adapter_config}"
+        )
+
+    if engine.model is None:
+        raise RuntimeError(
+            "InternVL base model must be loaded before attaching DoRA."
+        )
+
+    log.info("Loading DoRA adapter from: %s", adapter_path)
+
+    engine.model.language_model = PeftModel.from_pretrained(
+        engine.model.language_model,
+        str(adapter_path),
+        is_trainable=False,
+    )
+
+    engine.model.language_model = (
+        engine.model.language_model
+        .to(engine.device)
+        .eval()
+    )
+
+    for parameter in engine.model.parameters():
+        parameter.requires_grad = False
+
+    engine.model.eval()
+
+    if hasattr(engine.model, "vision_model"):
+        engine.model.vision_model.eval()
+
+    if hasattr(engine.model, "mlp1"):
+        engine.model.mlp1.eval()
+
+    engine.model.language_model.eval()
+
+    log.info("DoRA adapter attached successfully.")
+
+
 def run_cpu_interface_smoke_test(
     requests: Sequence[Request],
     responses_by_qid: dict[str, Response],
     output_path: Path,
 ) -> int:
-    """Write valid placeholder responses when CUDA is unavailable.
-
-    This mode verifies the Docker request/response interface only. It does not
-    load InternVL and must not be interpreted as a model test. The official
-    FRAME platform provides an NVIDIA L40S GPU.
-    """
+    """Write structurally valid empty responses when CUDA is unavailable."""
 
     log.warning(
         "CUDA is unavailable. Running interface-only CPU smoke mode; "
@@ -234,39 +327,33 @@ def run_cpu_interface_smoke_test(
     return 0
 
 
-# =============================================================================
-# Main
-# =============================================================================
-
-
 def run() -> int:
     """Run FRAME inference for one complete request batch."""
 
     process_start = time.monotonic()
     output_path = OUTPUT_PATH / "answer.json"
 
-    log.info(
-        "=== ORena SAVE FOCUS FRAME inference start ==="
-    )
-    log.info("PyTorch: %s", torch.__version__)
-    log.info(
-        "PyTorch CUDA runtime: %s",
-        torch.version.cuda,
-    )
-    log.info(
-        "CUDA available: %s",
-        torch.cuda.is_available(),
-    )
-
+    log.info("=== ORena SAVE FOCUS FRAME inference start ===")
     log.info("Execution mode: %s", EXECUTION_MODE)
     log.info("Input path: %s", INPUT_PATH)
     log.info("Output path: %s", OUTPUT_PATH)
+    log.info("Use system turn: %s", USE_SYSTEM_TURN)
+    log.info("Base model path: %s", MODEL_PATH)
+    log.info("DoRA adapter path: %s", DORA_ADAPTER_PATH)
+    log.info(
+        "FRAME configuration: input_size=%d, "
+        "max_tiles_per_image=%d, thumbnail=%s, max_new_tokens=%d",
+        INPUT_SIZE,
+        MAX_TILES_PER_IMAGE,
+        USE_THUMBNAIL,
+        MAX_NEW_TOKENS,
+    )
+    log.info("PyTorch: %s", torch.__version__)
+    log.info("PyTorch CUDA runtime: %s", torch.version.cuda)
+    log.info("CUDA available: %s", torch.cuda.is_available())
 
     if not REQUESTS_PATH.is_file():
-        log.error(
-            "Missing request file: %s",
-            REQUESTS_PATH,
-        )
+        log.error("Missing request file: %s", REQUESTS_PATH)
         return 1
 
     if not FO_DEFINITIONS_PATH.is_file():
@@ -277,52 +364,31 @@ def run() -> int:
         return 1
 
     if not FRAME_DIR.is_dir():
-        log.error(
-            "Missing FRAME image directory: %s",
-            FRAME_DIR,
-        )
+        log.error("Missing FRAME image directory: %s", FRAME_DIR)
         return 1
 
     try:
-        requests = list(
-            load_requests(REQUESTS_PATH)
-        )
+        requests = list(load_requests(REQUESTS_PATH))
         validate_requests(requests)
     except Exception:
-        log.exception(
-            "Failed to load or validate request.json."
-        )
+        log.exception("Failed to load or validate request.json.")
         return 1
 
     if not requests:
-        log.error(
-            "request.json contains no requests."
-        )
+        log.error("request.json contains no requests.")
         return 1
 
-    log.info(
-        "Loaded %d request(s).",
-        len(requests),
-    )
-    log.info(
-        "Frame directory: %s",
-        FRAME_DIR,
-    )
+    log.info("Loaded %d request(s).", len(requests))
+    log.info("Frame directory: %s", FRAME_DIR)
 
     try:
-        fo_definitions = load_fo_definitions(
-            FO_DEFINITIONS_PATH
-        )
-
-        shared_prompt, fo_class_names = (
-            build_shared_inference_prompt(
-                fo_definitions
-            )
+        fo_definitions = load_fo_definitions(FO_DEFINITIONS_PATH)
+        shared_prompt, fo_class_names = build_shared_inference_prompt(
+            fo_definitions
         )
     except Exception:
         log.exception(
-            "Failed to load the foreign-object definitions "
-            "or build the shared prompt."
+            "Failed to load FO definitions or build the shared prompt."
         )
         return 1
 
@@ -351,9 +417,7 @@ def run() -> int:
             output_path=output_path,
         )
     except Exception:
-        log.exception(
-            "Failed to write the initial answer.json."
-        )
+        log.exception("Failed to write the initial answer.json.")
         return 1
 
     if not torch.cuda.is_available():
@@ -363,34 +427,16 @@ def run() -> int:
             output_path=output_path,
         )
 
-    log.info(
-        "GPU: %s",
-        torch.cuda.get_device_name(0),
-    )
+    log.info("GPU: %s", torch.cuda.get_device_name(0))
 
     total_vram_gb = (
-        torch.cuda.get_device_properties(
-            0
-        ).total_memory
+        torch.cuda.get_device_properties(0).total_memory
         / (1024**3)
     )
 
     log.info(
         "Total GPU memory: %.2f GB",
         total_vram_gb,
-    )
-    log.info(
-        "Model path: %s",
-        MODEL_PATH,
-    )
-    log.info(
-        "FRAME configuration: input_size=%d, "
-        "max_tiles_per_image=%d, thumbnail=%s, "
-        "max_new_tokens=%d",
-        INPUT_SIZE,
-        MAX_TILES_PER_IMAGE,
-        USE_THUMBNAIL,
-        MAX_NEW_TOKENS,
     )
 
     engine = InternVLInferenceEngine(
@@ -401,25 +447,41 @@ def run() -> int:
         max_tiles_per_image=MAX_TILES_PER_IMAGE,
         use_thumbnail=USE_THUMBNAIL,
         max_new_tokens=MAX_NEW_TOKENS,
-        collect_gpu_diagnostics=(
-            COLLECT_GPU_DIAGNOSTICS
-        ),
+        use_system_turn=USE_SYSTEM_TURN,
+        collect_gpu_diagnostics=COLLECT_GPU_DIAGNOSTICS,
     )
 
     model_load_start = time.monotonic()
 
     try:
         engine.load()
+
+        log.info(
+            "Base InternVL3.5-8B loaded in %.2f seconds.",
+            time.monotonic() - model_load_start,
+        )
+
+        adapter_load_start = time.monotonic()
+
+        attach_dora_adapter(
+            engine=engine,
+            adapter_path=DORA_ADAPTER_PATH,
+        )
+
+        log.info(
+            "DoRA adapter loaded in %.2f seconds.",
+            time.monotonic() - adapter_load_start,
+        )
+
     except Exception:
         log.exception(
-            "InternVL model loading failed."
+            "InternVL3.5-8B / DoRA model loading failed."
         )
+        try:
+            engine.unload()
+        except Exception:
+            pass
         return 0
-
-    log.info(
-        "Model loaded in %.2f seconds.",
-        time.monotonic() - model_load_start,
-    )
 
     try:
         for index, request in enumerate(
@@ -428,14 +490,16 @@ def run() -> int:
         ):
             qid = str(request.qID)
             question_start = time.monotonic()
+            frame_timestamp = image_label_for(request)
 
             log.info(
                 "[%d/%d] qID=%s, videoID=%s, "
-                "frame_time=%.3f seconds",
+                "frame_time=%s (%.3f s)",
                 index,
                 len(requests),
                 qid,
                 request.videoID,
+                frame_timestamp,
                 float(request.start_time),
             )
 
@@ -443,14 +507,8 @@ def run() -> int:
             prediction = None
 
             try:
-                image_path = frame_path_for(
-                    request
-                )
-
-                image = load_frame(
-                    image_path
-                )
-
+                image_path = frame_path_for(request)
+                image = load_frame(image_path)
                 native_size = image.size
 
                 prompt = build_prompt(
@@ -461,6 +519,7 @@ def run() -> int:
                 prediction = engine.predict(
                     image=image,
                     prompt=prompt,
+                    image_label=frame_timestamp,
                 )
 
                 answer = normalize_answer(
@@ -495,18 +554,16 @@ def run() -> int:
                     )
 
                 log.info(
-                    "  native_size=%s, images=%d, "
-                    "patches=%d, model_inference=%.2f s",
+                    "  image_label=%s, native_size=%s, "
+                    "images=%d, patches=%d, model_inference=%.2f s",
+                    frame_timestamp,
                     native_size,
                     prediction.num_images,
                     prediction.num_patches,
                     prediction.inference_seconds,
                 )
 
-                if (
-                    prediction.peak_gpu_memory_gb
-                    is not None
-                ):
+                if prediction.peak_gpu_memory_gb is not None:
                     log.info(
                         "  peak allocated GPU memory: %.2f GB",
                         prediction.peak_gpu_memory_gb,
@@ -566,7 +623,7 @@ def run() -> int:
         output_path,
     )
     log.info(
-        "=== inference complete in %.2f seconds ===",
+        "=== FRAME inference complete in %.2f seconds ===",
         total_seconds,
     )
 

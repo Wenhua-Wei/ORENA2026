@@ -38,14 +38,14 @@ DEFAULT_CHECKPOINT_DIR = (
     / "segment"
     / "dora-ft"
     / "outputs"
-    / "internvl3_5_8b_dora_32frame_test"
+    / "internvl3_5_8b_dora_r8_test"
     / "final"
 )
 DEFAULT_SFT_JSONL = (
     ORENA_ROOT
     / "data"
     / "segment"
-    / "dora_8b_one32_test"
+    / "dora_8b_longest32_test"
     / "train_sft.jsonl"
 )
 INPUT_SIZE = 448
@@ -109,23 +109,75 @@ def load_record(path: Path, sample_id: str | None) -> dict[str, Any]:
 
 
 def validate_record(x: dict[str, Any]) -> None:
-    required = ("sample_id", "images", "num_frames", "user_text", "assistant_text")
-    missing = [k for k in required if k not in x]
+    required = (
+        "sample_id",
+        "images",
+        "num_frames",
+        "user_text",
+        "assistant_text",
+    )
+
+    missing = [
+        k
+        for k in required
+        if k not in x
+    ]
+
     if missing:
-        raise KeyError(f"{x.get('sample_id', '<unknown>')}: missing {missing}")
+        raise KeyError(
+            f"{x.get('sample_id', '<unknown>')}: missing {missing}"
+        )
+
     n = int(x["num_frames"])
+
     if not 1 <= n <= MAX_FRAMES:
-        raise RuntimeError(f"Invalid num_frames={n}")
+        raise RuntimeError(
+            f"Invalid num_frames={n}"
+        )
+
     if len(x["images"]) != n:
-        raise RuntimeError(f"len(images)={len(x['images'])} != num_frames={n}")
-    if str(x["user_text"]).count("<image>") != n:
-        raise RuntimeError("<image> placeholder count does not match num_frames")
+        raise RuntimeError(
+            f"len(images)={len(x['images'])} != num_frames={n}"
+        )
+
+    user_text = str(x["user_text"])
+
+    if user_text.count("<image>") != n:
+        raise RuntimeError(
+            "<image> placeholder count does not match num_frames"
+        )
+
+    if (
+        "You are a surgical assistant analysing endoscopic video"
+        in user_text
+    ):
+        raise RuntimeError(
+            "user_text still contains the old surgical "
+            "system instructions. Use a rebuilt SFT JSONL."
+        )
+
+    if "Input description:" not in user_text:
+        raise RuntimeError(
+            "user_text is missing 'Input description:'."
+        )
+
+    if "Current request:" not in user_text:
+        raise RuntimeError(
+            "user_text is missing 'Current request:'."
+        )
+
     if not str(x["assistant_text"]).strip():
-        raise RuntimeError("assistant_text is empty")
+        raise RuntimeError(
+            "assistant_text is empty"
+        )
+
     for raw in x["images"]:
         p = Path(str(raw))
+
         if not p.is_file() or p.stat().st_size <= 0:
-            raise FileNotFoundError(f"Missing/empty image: {p}")
+            raise FileNotFoundError(
+                f"Missing/empty image: {p}"
+            )
 
 
 def load_visual_input(x: dict[str, Any]) -> tuple[torch.Tensor, list[int]]:
@@ -166,10 +218,51 @@ def validate_adapter_config(adapter_dir: Path) -> dict[str, Any]:
     if not required.issubset(targets):
         raise RuntimeError(f"DoRA target mismatch: got {sorted(targets)}")
     logging.info("Adapter config PASSED: use_dora=True targets=%s", sorted(targets))
+    logging.info(
+        "Adapter hyperparameters: r=%s alpha=%s dropout=%s",
+        cfg.get("r"),
+        cfg.get("lora_alpha"),
+        cfg.get("lora_dropout"),
+    )
+
     if cfg.get("base_model_name_or_path"):
         logging.info("Adapter metadata base path: %s", cfg["base_model_name_or_path"])
         logging.info("This test ignores that hint and attaches the adapter to the explicitly loaded local InternVL LLM.")
     return cfg
+
+
+def load_training_state(
+    checkpoint_dir: Path,
+) -> dict[str, Any]:
+    path = checkpoint_dir / "training_state.json"
+
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Missing training state: {path}"
+        )
+
+    state = json.loads(
+        path.read_text(encoding="utf-8")
+    )
+
+    run_config = state.get("run_config")
+
+    if not isinstance(run_config, dict):
+        raise RuntimeError(
+            "training_state.json has no valid run_config."
+        )
+
+    system_message = str(
+        run_config.get("system_message", "")
+    ).strip()
+
+    if not system_message:
+        raise RuntimeError(
+            "training_state.json does not contain "
+            "the training system_message."
+        )
+
+    return state
 
 
 def load_mlp1(model: Any, path: Path) -> None:
@@ -280,8 +373,37 @@ def main() -> int:
     logging.info("Base model: %s", model_path)
     logging.info("Checkpoint: %s", checkpoint_dir)
 
-    adapter_cfg = validate_adapter_config(adapter_dir)
-    record = load_record(sft_jsonl, args.sample_id)
+    adapter_cfg = validate_adapter_config(
+        adapter_dir
+    )
+
+    training_state = load_training_state(
+        checkpoint_dir
+    )
+
+    run_config = training_state["run_config"]
+
+    system_message = str(
+        run_config["system_message"]
+    ).strip()
+
+    logging.info(
+        "Training system-message source: %s",
+        run_config.get(
+            "system_message_source",
+            "<unknown>",
+        ),
+    )
+
+    logging.info(
+        "Training system message: %d chars",
+        len(system_message),
+    )
+
+    record = load_record(
+        sft_jsonl,
+        args.sample_id,
+    )
     validate_record(record)
     logging.info(
         "Selected sample=%s frames=%d reference=%r",
@@ -304,14 +426,34 @@ def main() -> int:
         str(model_path),
         torch_dtype=dtype,
         low_cpu_mem_usage=True,
-        use_flash_attn=False,
+        use_flash_attn=True,
         trust_remote_code=True,
         local_files_only=True,
     ).to(device).eval()
 
+    base_system_message = getattr(
+        model,
+        "system_message",
+        None,
+    )
+
+    logging.info(
+        "Original InternVL system message: %r",
+        base_system_message,
+    )
+
+    model.system_message = system_message
+
+    logging.info(
+        "ORena surgical system message applied: %d chars",
+        len(model.system_message),
+    )
+
     base_result = None
     if args.compare_base:
-        logging.info("Generating with untouched base model...")
+        logging.info(
+            "Generating with base weights + ORena system message..."
+        )
         base_result = generate(
             model=model,
             tokenizer=tokenizer,

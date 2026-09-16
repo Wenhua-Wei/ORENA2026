@@ -1,22 +1,27 @@
-"""InternVL3.5 model utilities for ORena FOCUS FRAME inference.
+"""InternVL3.5 model utilities for ORena SAVE FOCUS FRAME inference.
 
 This module:
 1. loads ``InternVL3_5-8B-Instruct`` once from local files;
 2. converts one native-resolution RGB laparoscopic image into aspect-ratio-aware
    InternVL visual tiles;
-3. runs deterministic single-image inference; and
-4. returns the raw generated answer with basic diagnostics.
+3. supports deterministic single-image inference either with InternVL's normal
+   system turn or with the system turn disabled; and
+4. returns the raw generated answer with lightweight diagnostics.
 
-The original FRAME PNG may have any supported source resolution or aspect ratio.
-This module preserves that information until InternVL preprocessing selects an
-appropriate tile grid. Each final model tile is resized to ``input_size`` square
+For the current FRAME submission, ``use_system_turn=False`` should be used so
+the prompt is serialized directly as a user turn followed by the assistant turn,
+matching the current SEGMENT submission setup.
+
+The original FRAME PNG is kept at native resolution until InternVL preprocessing
+selects a dynamic tile grid. Each final tile is resized to ``input_size`` square
 pixels, normally 448 x 448.
 """
 
 from __future__ import annotations
 
-import json
 import gc
+import json
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,25 +53,6 @@ SMOKE_TEST_IMAGE_PATH = (
     / "frames"
     / "q0001.png"
 )
-
-SMOKE_TEST_REQUESTS_PATH = (
-    APP_PATH
-    / "test"
-    / "input"
-    / "interface_1"
-    / "request.json"
-)
-
-SMOKE_TEST_FO_DEFINITIONS_PATH = (
-    APP_PATH
-    / "test"
-    / "input"
-    / "interface_1"
-    / "FO_definitions.json"
-)
-
-# Change to True only on a CUDA machine when you want one complete model test.
-RUN_FULL_MODEL_TEST = True
 
 
 @dataclass(frozen=True)
@@ -115,7 +101,7 @@ def find_closest_aspect_ratio(
     height: int,
     image_size: int,
 ) -> tuple[int, int]:
-    """Choose the tile grid closest to the source aspect ratio."""
+    """Choose the InternVL tile grid closest to the source aspect ratio."""
 
     if aspect_ratio <= 0:
         raise ValueError("aspect_ratio must be positive.")
@@ -165,13 +151,17 @@ def dynamic_preprocess(
 ) -> list[Image.Image]:
     """Split one native-resolution image into InternVL visual tiles.
 
-    The source may have any positive width, height, or aspect ratio. A grid is
-    selected dynamically, the source is resized to that grid canvas, and the
-    canvas is cropped into ``image_size x image_size`` tiles.
+    The source image keeps its native aspect ratio until a tile grid is chosen.
+    The image is then resized to the grid canvas and cropped into
+    ``image_size x image_size`` local tiles.
 
-    When more than one local tile is produced and ``use_thumbnail=True``, one
-    additional global thumbnail is appended.
+    If more than one local tile is produced and ``use_thumbnail=True``, one
+    additional global thumbnail is appended. Therefore, with ``max_num=4``,
+    the model receives at most 5 visual patches for one FRAME image.
     """
+
+    if not isinstance(image, Image.Image):
+        raise TypeError("image must be a PIL.Image.Image.")
 
     if min_num <= 0:
         raise ValueError("min_num must be positive.")
@@ -243,8 +233,7 @@ def dynamic_preprocess(
         if tile.size != (image_size, image_size):
             raise RuntimeError(
                 "Unexpected tile dimensions: "
-                f"{tile.size}; expected "
-                f"{(image_size, image_size)}."
+                f"{tile.size}; expected {(image_size, image_size)}."
             )
 
         processed_images.append(tile)
@@ -270,7 +259,16 @@ def prepare_image(
     max_tiles_per_image: int = 4,
     use_thumbnail: bool = True,
 ) -> tuple[torch.Tensor, list[int]]:
-    """Convert one PIL image into InternVL pixel values."""
+    """Convert one PIL image into InternVL pixel values.
+
+    Returns
+    -------
+    pixel_values:
+        Tensor with shape ``[num_patches, 3, input_size, input_size]``.
+    num_patches_list:
+        A one-element list because FRAME has one logical image group.
+        For example, ``[5]`` means one image represented by five patches.
+    """
 
     if not isinstance(image, Image.Image):
         raise TypeError("image must be a PIL.Image.Image.")
@@ -327,8 +325,9 @@ class InternVLInferenceEngine:
         input_size: int = 448,
         max_tiles_per_image: int = 4,
         use_thumbnail: bool = True,
-        max_new_tokens: int = 64,
-        collect_gpu_diagnostics: bool = True,
+        max_new_tokens: int = 128,
+        use_system_turn: bool = False,
+        collect_gpu_diagnostics: bool = False,
     ) -> None:
         self.model_path = (
             Path(model_path)
@@ -362,16 +361,19 @@ class InternVLInferenceEngine:
         self.dtype = dtype
         self.input_size = input_size
         self.max_tiles_per_image = max_tiles_per_image
-        self.use_thumbnail = use_thumbnail
+        self.use_thumbnail = bool(use_thumbnail)
         self.max_new_tokens = max_new_tokens
-        self.collect_gpu_diagnostics = collect_gpu_diagnostics
+        self.use_system_turn = bool(use_system_turn)
+        self.collect_gpu_diagnostics = bool(
+            collect_gpu_diagnostics
+        )
 
         self.model = None
         self.tokenizer = None
 
     @property
     def is_loaded(self) -> bool:
-        """Whether both the model and tokenizer are loaded."""
+        """Whether both model and tokenizer are loaded."""
 
         return (
             self.model is not None
@@ -433,15 +435,134 @@ class InternVLInferenceEngine:
         )
 
         print("InternVL model loaded.", flush=True)
+        print(
+            "Original InternVL system message: "
+            f"{getattr(self.model, 'system_message', None)!r}",
+            flush=True,
+        )
+        print(
+            f"Use system turn: {self.use_system_turn}",
+            flush=True,
+        )
+
+    def _generate_without_system(
+        self,
+        *,
+        pixel_values: torch.Tensor,
+        question: str,
+        generation_config: dict,
+        num_patches_list: Sequence[int],
+    ) -> str:
+        """Generate with InternVL user/assistant serialization and no system turn.
+
+        This follows the same no-system-turn strategy as the current SEGMENT
+        submission. ``question`` must contain exactly one ``<image>`` placeholder
+        for the one FRAME image.
+        """
+
+        img_start_token = "<img>"
+        img_end_token = "</img>"
+        img_context_token = "<IMG_CONTEXT>"
+
+        if question.count("<image>") != len(num_patches_list):
+            raise RuntimeError(
+                "Expected exactly one <image> placeholder per visual group: "
+                f"placeholders={question.count('<image>')}, "
+                f"groups={len(num_patches_list)}."
+            )
+
+        img_context_token_id = (
+            self.tokenizer.convert_tokens_to_ids(
+                img_context_token
+            )
+        )
+
+        if img_context_token_id is None:
+            raise RuntimeError(
+                "Tokenizer does not contain <IMG_CONTEXT>."
+            )
+
+        self.model.img_context_token_id = int(
+            img_context_token_id
+        )
+
+        # Intentionally no system turn.
+        query = (
+            "<|im_start|>user\n"
+            + question
+            + "<|im_end|>\n"
+            + "<|im_start|>assistant\n"
+        )
+
+        for num_patches in num_patches_list:
+            image_tokens = (
+                img_start_token
+                + img_context_token
+                * int(self.model.num_image_token)
+                * int(num_patches)
+                + img_end_token
+            )
+
+            query = query.replace(
+                "<image>",
+                image_tokens,
+                1,
+            )
+
+        if "<image>" in query:
+            raise RuntimeError(
+                "Unexpanded <image> placeholder remains."
+            )
+
+        model_inputs = self.tokenizer(
+            query,
+            return_tensors="pt",
+        )
+
+        input_ids = model_inputs["input_ids"].to(
+            self.device
+        )
+        attention_mask = model_inputs["attention_mask"].to(
+            self.device
+        )
+
+        eos_token_id = (
+            self.tokenizer.convert_tokens_to_ids(
+                "<|im_end|>"
+            )
+        )
+
+        if eos_token_id is None:
+            raise RuntimeError(
+                "Tokenizer does not contain <|im_end|>."
+            )
+
+        config = dict(generation_config)
+        config["eos_token_id"] = int(eos_token_id)
+
+        generation_output = self.model.generate(
+            pixel_values=pixel_values,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            **config,
+        )
+
+        response = self.tokenizer.batch_decode(
+            generation_output,
+            skip_special_tokens=True,
+        )[0]
+
+        return response.split("<|im_end|>")[0].strip()
 
     def predict(
         self,
         image: Image.Image,
         prompt: str,
         *,
+        image_label: str | None = None,
         max_new_tokens: int | None = None,
     ) -> PredictionResult:
-        """Run one deterministic single-image inference call."""
+        """Run one deterministic single-image FRAME inference call."""
 
         if not self.is_loaded:
             raise RuntimeError(
@@ -482,10 +603,14 @@ class InternVLInferenceEngine:
             non_blocking=True,
         )
 
-        question = (
-            "Image: <image>\n"
-            + cleaned_prompt
-        )
+        # FRAME has one logical visual input. The image may internally consist
+        # of multiple InternVL tiles, but it still gets one <image> placeholder.
+        if image_label is None:
+            image_prefix = "Image: <image>\n"
+        else:
+            image_prefix = f"Image at {image_label}: <image>\n"
+
+        question = image_prefix + cleaned_prompt
 
         generation_config = {
             "max_new_tokens": generation_tokens,
@@ -510,13 +635,21 @@ class InternVLInferenceEngine:
             start_time = time.perf_counter()
 
             with torch.inference_mode():
-                response = self.model.chat(
-                    self.tokenizer,
-                    pixel_values,
-                    question,
-                    generation_config,
-                    num_patches_list=num_patches_list,
-                )
+                if self.use_system_turn:
+                    response = self.model.chat(
+                        self.tokenizer,
+                        pixel_values,
+                        question,
+                        generation_config,
+                        num_patches_list=num_patches_list,
+                    )
+                else:
+                    response = self._generate_without_system(
+                        pixel_values=pixel_values,
+                        question=question,
+                        generation_config=generation_config,
+                        num_patches_list=num_patches_list,
+                    )
 
             if (
                 self.device.type == "cuda"
@@ -566,7 +699,7 @@ class InternVLInferenceEngine:
 def _check_model_snapshot(
     model_path: Path,
 ) -> None:
-    """Verify that the offline InternVL snapshot is complete."""
+    """Verify that the essential offline InternVL snapshot is present."""
 
     required_files = (
         "config.json",
@@ -599,6 +732,7 @@ def _check_model_snapshot(
                 encoding="utf-8",
             ) as file:
                 index_data = json.load(file)
+
         except (OSError, json.JSONDecodeError) as error:
             raise RuntimeError(
                 f"Failed to read model index: {index_path}"
@@ -608,8 +742,7 @@ def _check_model_snapshot(
 
         if not isinstance(weight_map, dict) or not weight_map:
             raise ValueError(
-                "model.safetensors.index.json contains no "
-                "valid weight_map."
+                "model.safetensors.index.json contains no valid weight_map."
             )
 
         shard_names = sorted(
@@ -640,8 +773,9 @@ def _check_model_snapshot(
             f"Missing files:\n{formatted}"
         )
 
+
 def _load_smoke_test_image() -> Image.Image:
-    """Load the configured real FRAME PNG for local checks."""
+    """Load q0001.png for preprocessing/inference smoke tests."""
 
     if not SMOKE_TEST_IMAGE_PATH.is_file():
         raise FileNotFoundError(
@@ -655,6 +789,7 @@ def _load_smoke_test_image() -> Image.Image:
         ) as opened_image:
             opened_image.load()
             image = opened_image.convert("RGB")
+
     except OSError as error:
         raise RuntimeError(
             "Failed to decode smoke-test frame: "
@@ -667,7 +802,7 @@ def _load_smoke_test_image() -> Image.Image:
 def _run_preprocessing_smoke_test(
     image: Image.Image,
 ) -> None:
-    """Check preprocessing without loading the complete model."""
+    """Check FRAME visual preprocessing without loading the complete model."""
 
     pixel_values, num_patches_list = prepare_image(
         image=image,
@@ -706,7 +841,7 @@ def _run_preprocessing_smoke_test(
 
 
 def main() -> None:
-    """Run lightweight checks and optionally one full GPU inference."""
+    """Run lightweight checks and optionally one complete GPU generation."""
 
     model_path = SMOKE_TEST_MODEL_PATH.resolve()
 
@@ -753,26 +888,37 @@ def main() -> None:
 
     print("\nLoading real FRAME image...")
     image = _load_smoke_test_image()
-    print(f"Image loaded: mode={image.mode}, size={image.size}")
+    print(
+        f"Image loaded: mode={image.mode}, "
+        f"size={image.size}"
+    )
 
     print("\nChecking visual preprocessing...")
     _run_preprocessing_smoke_test(image)
 
-    if not RUN_FULL_MODEL_TEST:
+    run_full_model_test = (
+        os.environ.get(
+            "RUN_FULL_MODEL_TEST",
+            "0",
+        ).strip()
+        == "1"
+    )
+
+    if not run_full_model_test:
         print(
             "\nLightweight smoke test passed.\n"
-            "Set RUN_FULL_MODEL_TEST = True near the top of "
-            "model_utils.py to load the complete model and run "
-            "one generation."
+            "Set RUN_FULL_MODEL_TEST=1 to load the complete model "
+            "and run one generation."
         )
         return
 
     if not torch.cuda.is_available():
         raise RuntimeError(
-            "RUN_FULL_MODEL_TEST is True, but CUDA is unavailable."
+            "RUN_FULL_MODEL_TEST=1 was requested, "
+            "but CUDA is unavailable."
         )
 
-    print("\nLoading the complete model for a full GPU test...")
+    print("\nLoading the complete model for one GPU test...")
 
     engine = InternVLInferenceEngine(
         model_path=model_path,
@@ -781,98 +927,26 @@ def main() -> None:
         input_size=448,
         max_tiles_per_image=4,
         use_thumbnail=True,
-        max_new_tokens=64,
+        max_new_tokens=32,
+        use_system_turn=False,
         collect_gpu_diagnostics=True,
     )
 
     try:
         engine.load()
 
-        # These imports are needed only for the complete local smoke test.
-        # Keeping them here avoids making the reusable model engine depend
-        # directly on the challenge prompt and answer utilities.
-        from focus import load_requests
-
-        from answer_utils import (
-            extract_fo_class_names,
-            normalize_answer,
-        )
-        from prompt_utils import (
-            build_prompt,
-            build_shared_prompt,
-            load_fo_definitions,
-        )
-
-        requests = list(
-            load_requests(
-                SMOKE_TEST_REQUESTS_PATH
-            )
-        )
-
-        if not requests:
-            raise RuntimeError(
-                "The smoke-test request file contains no requests."
-            )
-
-        # The configured test image is q0001.png, so use the q0001 request.
-        request = next(
-            (
-                item
-                for item in requests
-                if str(item.qID) == "q0001"
-            ),
-            None,
-        )
-
-        if request is None:
-            raise RuntimeError(
-                "Could not find q0001 in the smoke-test request file."
-            )
-
-        fo_definitions = load_fo_definitions(
-            SMOKE_TEST_FO_DEFINITIONS_PATH
-        )
-
-        shared_prompt = build_shared_prompt(
-            fo_definitions=fo_definitions,
-            few_shot_examples=(),
-        )
-
-        prompt = build_prompt(
-            request=request,
-            shared_prompt=shared_prompt,
-        )
-
-        fo_class_names = extract_fo_class_names(
-            fo_definitions
-        )
-
-        if not fo_class_names:
-            raise RuntimeError(
-                "No foreign-object class names were extracted."
-            )
-
-        # print("\nPrompt passed to InternVL:")
-        # print("=" * 80)
-        # print(prompt)
-        # print("=" * 80)
-
         result = engine.predict(
             image=image,
-            prompt=prompt,
-        )
-
-        normalized_answer = normalize_answer(
-            result.answer,
-            fo_class_names=fo_class_names,
+            prompt=(
+                "This is one laparoscopic image. "
+                "Answer only yes or no: is there any visible content "
+                "in the supplied image?"
+            ),
+            image_label="00:33:19",
         )
 
         print("\nFull inference smoke test passed.")
-        print(f"  raw answer: {result.answer!r}")
-        print(
-            "  normalized answer: "
-            f"{normalized_answer!r}"
-        )   
+        print(f"  answer: {result.answer!r}")
         print(
             "  inference time: "
             f"{result.inference_seconds:.2f} seconds"

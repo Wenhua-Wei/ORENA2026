@@ -1,31 +1,29 @@
-"""Prompt utilities for ORena FOCUS FRAME inference.
+"""Prompt utilities for ORena SAVE FOCUS FRAME inference.
 
-The current query prompt uses only information available during challenge
+The current FRAME query prompt uses only information available during challenge
 inference:
 
 - ``focus.Request``;
-- the batch-specific ``FO_definitions.json``; and
-- optional fixed text-only demonstrations.
+- the batch-specific ``FO_definitions.json`` only to obtain canonical foreign-
+  object class names; and
+- optional fixed text-only FRAME demonstrations.
 
 Reference answers, answer-format labels, capability labels, OOD labels, and
 other reference-side metadata are never used to construct the prompt.
 
-FRAME requests contain one still image. Timestamp metadata is not separately
-included in the model prompt because the supplied image is the complete visual
-input.
+FRAME is a single-image task. No frame-sampling, duration, temporal-ordering,
+or multi-frame tracking instructions are included here.
 """
 
 from __future__ import annotations
 
 import json
-import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
 from focus import Request
-
-import re
+from focus.foreign_objects import FOType
 
 
 @dataclass(frozen=True)
@@ -38,56 +36,48 @@ class FewShotExample:
     def __post_init__(self) -> None:
         if not self.question.strip():
             raise ValueError("Few-shot question must not be empty.")
-
         if not self.answer.strip():
             raise ValueError("Few-shot answer must not be empty.")
 
 
-# Keep the default empty for zero-shot inference. If few-shot prompting is
-# enabled later, add only FRAME examples here. Do not reuse SEGMENT examples
-# involving temporal localization, duration, ordering, or multi-frame tracking.
+# Zero-shot by default. If enabled later, use FRAME examples only.
 DEFAULT_FEW_SHOT_EXAMPLES: tuple[FewShotExample, ...] = ()
 
 
-_SHARED_INSTRUCTIONS_BEFORE_DEFINITIONS = """\
-You are given one laparoscopic image from a minimally invasive surgical procedure and one question about visible foreign objects.
+_SHARED_INSTRUCTIONS = """\
+You are a surgical assistant analysing one endoscopic image from a minimally invasive surgical procedure. There are procedures like Proctocolectomy, Rectal Resection, Sigmoid Resection, Laparoscopic Cholecystectomy, etc. as specified below under “Current request”. Answer the surgical question using the visual evidence in the provided image and the information explicitly stated in the question, paying particular attention to foreign objects. A foreign object (FO) is an object that has been fully introduced into the patient’s body cavity and is no longer connected to the external environment. Examples include {fo_class_examples}. Standard surgical instruments that remain connected to the external environment, such as graspers, scissors, trocars, staplers, suction devices, and cameras, are not considered foreign objects.
+Examples of typical procedure-related actions and anatomy that may be relevant include, but are not limited to:
+- Proctocolectomy: mesenteric/tissue dissection, inferior mesenteric vessel clipping, rectal staple-line management and transection, specimen bagging, bowel approximation and anastomosis-related preparation, retraction, hemostasis, and drainage.
+- Rectal Resection: mesenteric/blunt dissection, vascular clipping or ligation, bowel-lesion suturing, loop-ileostomy marking, specimen-bag extraction, retraction, and drain placement.
+- Sigmoid Resection: inferior mesenteric artery/vein clipping, vascular division, colon mobilization and sigmoid-mesocolon dissection, colorectal anastomosis, air-leak testing, suture reinforcement or anastomotic revision, drain placement, and hemostasis.
+- Laparoscopic Cholecystectomy: Critical View of Safety preparation, cystic duct and artery clipping and division, gallbladder dissection from the liver/cystic plate, specimen bagging and retrieval, gallstone retrieval, cholangiography when applicable, retraction, and hemostasis.
 
-Answer using only:
-1. visual evidence in the supplied image;
-2. explicit facts and constraints stated in the question;
-3. the procedure type as supporting context; and
-4. the supplied foreign-object definitions.\
+Determine the required answer format strictly from the wording of the question and follow the corresponding rule, as illustrated by the examples below. Return only the answer, with no explanation or prefix.
+
+- Binary:
+Q: Do Needles and Sponges co-occur in this frame? Please answer with yes or no.
+A: yes
+
+- Number:
+Q: How many Sponges appear in this frame? Please provide a number.
+A: 2
+
+- Foreign-object class:
+Q: Which foreign object class is partially occluded by an instrument in this frame? Please provide the class name or answer none.
+A: Sponge
+
+- Multiple choice:
+Q: Where is the center of the Specimen bag located relative to the image center in this frame? Please select one answer: top/left; top/right; bottom/left; bottom/right
+A: top/right
+
+- Open-ended:
+Q: In which abdominal quadrant is the sponge located? Please provide an anatomical location.
+A: left lower quadrant
 """
 
-
-_SHARED_INSTRUCTIONS_AFTER_DEFINITIONS = """\
-Apply the foreign-object definitions exactly. A separate foreign object being held by an instrument is still a foreign object. Count a partially visible object when it is sufficiently visible to identify.
-
-Before answering, silently identify the visible foreign-object classes and distinct physical instances, then resolve only what the question asks.
-
-Counting rules:
-- Object-instance count means the number of distinct physical foreign objects.
-- Object-class count means the number of distinct foreign-object classes.
-- A count for a named class includes only visible instances of that class.
-- Co-occurrence is yes only when both named classes are visible.
-- All objects are of the same class only when exactly one distinct class is represented among the visible foreign objects.
-
-For questions asking for every object's position, report every visible foreign-object instance separately, including multiple instances of the same class, and follow the requested structure exactly.
-For occlusion questions, name the foreign object being occluded, not the instrument or anatomical structure causing the occlusion.
-For grasping questions, answer yes only when the foreign object is visibly held or clamped by an instrument, not merely touching or lying beside it.
-
-Determine the required answer format from the wording of the question and follow it exactly:
-- Binary: exactly yes or no.
-- Number: one non-negative integer only.
-- Foreign-object class: canonical class name(s), comma-separated, or none.
-- Multiple choice: only the selected option or options exactly as written in the question.
-- Open-ended: a concise direct answer that fully addresses the question.
-
-Return only the answer, with no explanation, reasoning, prefix, or label. Do not add terminal punctuation unless the requested answer is open-ended.\
-"""
 
 def load_fo_definitions(path: str | Path) -> str:
-    """Load the JSON-encoded text stored in ``FO_definitions.json``."""
+    """Load FO definitions, allowing an empty file, JSON null, or a JSON string."""
 
     definitions_path = Path(path).expanduser().resolve()
 
@@ -96,182 +86,117 @@ def load_fo_definitions(path: str | Path) -> str:
             f"FO definitions file does not exist: {definitions_path}"
         )
 
+    raw = definitions_path.read_text(encoding="utf-8").strip()
+
+    # Accept a zero-byte or whitespace-only file.
+    if not raw:
+        return ""
+
     try:
-        with definitions_path.open("r", encoding="utf-8") as file:
-            value = json.load(file)
+        value = json.loads(raw)
     except json.JSONDecodeError as error:
         raise ValueError(
-            f"FO_definitions.json is not valid JSON: {definitions_path}"
+            "FO_definitions.json must be empty or contain one valid JSON string."
         ) from error
+
+    # Optionally accept JSON null as empty.
+    if value is None:
+        return ""
 
     if not isinstance(value, str):
         raise ValueError(
-            "FO_definitions.json must contain one JSON string."
+            "FO_definitions.json must be empty or contain one JSON string."
         )
 
-    definitions = value.strip()
+    return value.strip()
 
-    if not definitions:
-        raise ValueError("FO_definitions.json is empty.")
 
-    return definitions
+def extract_fo_class_names(
+    fo_definitions: str,
+) -> tuple[str, ...]:
+    """Extract canonical FO class headings from the supplied definitions text.
 
-def format_fo_definitions(fo_definitions: str) -> str:
-    """Convert the underlined FO definitions into prompt-friendly text."""
+    The submission-template definitions use reStructuredText-style headings,
+    for example::
+
+        Sponge
+        ------
+
+    Only headings underlined with hyphens are treated as class names. Section
+    headings underlined with equals signs are ignored.
+    """
 
     if not isinstance(fo_definitions, str):
         raise TypeError("fo_definitions must be a string.")
 
-    lines = fo_definitions.strip().splitlines()
-
-    definition_heading = "Foreign Object (FO) Definition"
-    classes_heading = "Foreign Object Classes"
-
-    try:
-        definition_index = lines.index(definition_heading)
-        classes_index = lines.index(classes_heading)
-    except ValueError as error:
-        raise ValueError(
-            "FO definitions do not contain the expected section headings."
-        ) from error
-
-    if definition_index >= classes_index:
-        raise ValueError(
-            "FO definition sections appear in an unexpected order."
-        )
-
-    if (
-        definition_index + 1 >= len(lines)
-        or not re.fullmatch(
-            r"={3,}",
-            lines[definition_index + 1].strip(),
-        )
-    ):
-        raise ValueError(
-            "The general FO definition heading has no valid underline."
-        )
-
-    if (
-        classes_index + 1 >= len(lines)
-        or not re.fullmatch(
-            r"={3,}",
-            lines[classes_index + 1].strip(),
-        )
-    ):
-        raise ValueError(
-            "The FO classes heading has no valid underline."
-        )
-
-    general_lines = lines[
-        definition_index + 2 : classes_index
+    lines = [
+        line.rstrip()
+        for line in fo_definitions.splitlines()
     ]
 
-    while general_lines and not general_lines[0].strip():
-        general_lines.pop(0)
+    names: list[str] = []
 
-    while general_lines and not general_lines[-1].strip():
-        general_lines.pop()
-
-    if not general_lines:
-        raise ValueError("The general FO definition is empty.")
-
-    class_lines = lines[classes_index + 2 :]
-    classes: list[tuple[str, list[str]]] = []
-    index = 0
-
-    while index < len(class_lines):
-        if not class_lines[index].strip():
-            index += 1
-            continue
-
-        class_name = class_lines[index].strip()
+    for index in range(len(lines) - 1):
+        heading = lines[index].strip()
+        underline = lines[index + 1].strip()
 
         if (
-            index + 1 >= len(class_lines)
-            or not re.fullmatch(
-                r"-{3,}",
-                class_lines[index + 1].strip(),
-            )
+            heading
+            and underline
+            and set(underline) == {"-"}
         ):
-            raise ValueError(
-                "Expected an underlined FO class heading, found: "
-                f"{class_lines[index]!r}"
-            )
+            names.append(heading)
 
-        index += 2
-        description_lines: list[str] = []
+    return tuple(dict.fromkeys(names))
 
-        while index < len(class_lines):
-            current = class_lines[index]
 
-            is_next_heading = (
-                current.strip()
-                and index + 1 < len(class_lines)
-                and re.fullmatch(
-                    r"-{3,}",
-                    class_lines[index + 1].strip(),
-                )
-            )
+def resolve_fo_class_names(
+    fo_definitions: str,
+) -> tuple[str, ...]:
+    """Return class names from FO definitions with a safe package fallback."""
 
-            if is_next_heading:
-                break
-
-            description_lines.append(current.rstrip())
-            index += 1
-
-        while (
-            description_lines
-            and not description_lines[0].strip()
-        ):
-            description_lines.pop(0)
-
-        while (
-            description_lines
-            and not description_lines[-1].strip()
-        ):
-            description_lines.pop()
-
-        if not description_lines:
-            raise ValueError(
-                f"FO class {class_name!r} has no definition."
-            )
-
-        classes.append(
-            (class_name, description_lines)
-        )
-
-    if not classes:
-        raise ValueError("No FO classes were found.")
-
-    general_definition = " ".join(
-        line.strip()
-        for line in general_lines
-        if line.strip()
+    extracted = extract_fo_class_names(
+        fo_definitions
     )
 
-    output_lines = [
-        "Foreign-object (FO) definitions:",
-        general_definition,
-        "Foreign Object Classes:",
+    if extracted:
+        return extracted
+
+    return tuple(FOType.names())
+
+
+def format_fo_class_examples(
+    class_names: Sequence[str],
+) -> str:
+    """Format canonical FO class names as a compact natural-language list."""
+
+    names = [
+        str(name).strip()
+        for name in class_names
+        if str(name).strip()
     ]
 
-    for class_name, description_lines in classes:
-        class_definition = " ".join(
-            line.strip()
-            for line in description_lines
-            if line.strip()
+    if not names:
+        raise ValueError(
+            "At least one foreign-object class name is required."
         )
-        output_lines.append(f"{class_name}: {class_definition}")
 
-    return "\n".join(output_lines)
+    if len(names) == 1:
+        return names[0]
 
+    if len(names) == 2:
+        return f"{names[0]} and {names[1]}"
 
+    return (
+        ", ".join(names[:-1])
+        + f", and {names[-1]}"
+    )
 
 
 def format_few_shot_examples(
     examples: Sequence[FewShotExample],
 ) -> str:
-    """Format demonstrations as repeated ``Question`` / ``Answer`` blocks."""
+    """Format demonstrations as repeated Question/Answer pairs."""
 
     blocks = [
         "\n".join(
@@ -294,47 +219,61 @@ def build_shared_prompt(
 ) -> str:
     """Build the prompt portion reusable for every request in one batch.
 
-    ``FO_definitions.json`` must still be read once per container run because
-    the available classes and definitions may differ between batches.
+    ``FO_definitions.json`` is used only to obtain the canonical foreign-object
+    class names. The full definition text is deliberately not appended to the
+    prompt, matching the current SEGMENT inference design.
     """
 
-    definitions = fo_definitions.strip()
+    fo_class_names = resolve_fo_class_names(
+        fo_definitions
+    )
 
-    if not definitions:
-        raise ValueError("fo_definitions must not be empty.")
-
-    formatted_definitions = format_fo_definitions(
-        definitions
+    shared_instructions = (
+        _SHARED_INSTRUCTIONS.replace(
+            "{fo_class_examples}",
+            format_fo_class_examples(
+                fo_class_names
+            ),
+        )
     )
 
     sections = [
-        _SHARED_INSTRUCTIONS_BEFORE_DEFINITIONS,
-        formatted_definitions,
-        _SHARED_INSTRUCTIONS_AFTER_DEFINITIONS,
+        shared_instructions.strip()
     ]
 
     if few_shot_examples:
         sections.append(
             "Examples:\n"
-            + format_few_shot_examples(few_shot_examples)
+            + format_few_shot_examples(
+                few_shot_examples
+            )
         )
 
     return "\n\n".join(sections)
 
 
-def build_request_prompt(request: Request) -> str:
+def build_request_prompt(
+    request: Request,
+) -> str:
     """Build the request-specific FRAME prompt."""
 
     question = request.question.strip()
 
     if not question:
-        raise ValueError("request.question must not be empty.")
+        raise ValueError(
+            "request.question must not be empty."
+        )
 
-    procedure_type = str(request.procedure_type).strip()
+    procedure_type = str(
+        request.procedure_type
+    ).strip()
 
     if not procedure_type:
         procedure_type = "Unknown"
 
+    # FRAME requests normally have start_time == end_time. The timestamp is not
+    # added separately because the supplied image is the complete visual input
+    # and any relevant timepoint is already stated in the question itself.
     return "\n".join(
         [
             "Current request:",
@@ -343,6 +282,7 @@ def build_request_prompt(request: Request) -> str:
             "Answer:",
         ]
     )
+
 
 def build_prompt(
     request: Request,
@@ -353,13 +293,19 @@ def build_prompt(
     shared = shared_prompt.strip()
 
     if not shared:
-        raise ValueError("shared_prompt must not be empty.")
+        raise ValueError(
+            "shared_prompt must not be empty."
+        )
 
-    return shared + "\n\n" + build_request_prompt(request)
+    return (
+        shared
+        + "\n\n"
+        + build_request_prompt(request)
+    )
 
 
 def main() -> None:
-    """Run a local smoke test without command-line arguments."""
+    """Run a local FRAME prompt smoke test."""
 
     project_dir = Path(__file__).resolve().parent
 
@@ -371,9 +317,18 @@ def main() -> None:
         / "FO_definitions.json"
     )
 
-    definitions = load_fo_definitions(definitions_path)
+    definitions = load_fo_definitions(
+        definitions_path
+    )
 
-    # Zero-shot by default.
+    fo_class_names = resolve_fo_class_names(
+        definitions
+    )
+
+    print("FO classes used in prompt:")
+    print("  " + ", ".join(fo_class_names))
+    print()
+
     shared_prompt = build_shared_prompt(
         fo_definitions=definitions,
         few_shot_examples=(),
@@ -402,7 +357,11 @@ def main() -> None:
     print("=" * 80)
     print(prompt)
     print("\n" + "=" * 80)
-    print("Prompt length:", len(prompt), "characters")
+    print(
+        "Prompt length:",
+        len(prompt),
+        "characters",
+    )
     print("Smoke test passed.")
 
 

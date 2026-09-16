@@ -59,10 +59,9 @@ if not SEGMENT_ALGORITHM_DIR.is_dir():
 if str(SEGMENT_ALGORITHM_DIR) not in sys.path:
     sys.path.insert(0, str(SEGMENT_ALGORITHM_DIR))
 
-from prompt_utils import (
+from prompt_utils import (  # noqa: E402
     build_prompt,
     build_shared_prompt,
-    build_system_prompt,
     load_fo_definitions,
     resolve_fo_class_names,
     seconds_to_timestamp,
@@ -614,25 +613,20 @@ def main() -> int:
         explicit_path=args.fo_definitions,
     )
 
-    fo_class_names = resolve_fo_class_names(
-        fo_definitions
-    )
+    fo_class_names = resolve_fo_class_names(fo_definitions)
 
-    system_prompt = build_system_prompt(
-        fo_definitions,
-        few_shot_examples=(),
-    )
-
-    shared_prompt = build_shared_prompt(
-        few_shot_examples=(),
-    )
+    if USE_FEW_SHOT_EXAMPLES:
+        shared_prompt = build_shared_prompt(
+            fo_definitions=fo_definitions,
+        )
+    else:
+        shared_prompt = build_shared_prompt(
+            fo_definitions=fo_definitions,
+            few_shot_examples=(),
+        )
 
     shared_prompt_sha256 = hashlib.sha256(
         shared_prompt.encode("utf-8")
-    ).hexdigest()
-
-    system_prompt_sha256 = hashlib.sha256(
-        system_prompt.encode("utf-8")
     ).hexdigest()
 
     logging.info("FO class source: %s", fo_source)
@@ -642,13 +636,7 @@ def main() -> int:
         ", ".join(fo_class_names),
     )
     logging.info(
-        "System prompt: %d chars, sha256=%s",
-        len(system_prompt),
-        system_prompt_sha256,
-    )
-
-    logging.info(
-        "User shared prompt: %d chars, sha256=%s",
+        "Shared prompt: %d chars, sha256=%s",
         len(shared_prompt),
         shared_prompt_sha256,
     )
@@ -712,19 +700,14 @@ def main() -> int:
         "data_root": str(data_root),
         "output_root": str(output_root),
         "prompt_alignment": {
-            "few_shot_examples": False,
+            "few_shot_examples": USE_FEW_SHOT_EXAMPLES,
             "target_fps": TARGET_FPS,
             "max_frames": MAX_FRAMES,
             "frame_prefix_format": "HH:MM:SS: <image>\\n",
             "fo_definitions_source": fo_source,
             "fo_class_names": list(fo_class_names),
-
-            "system_prompt_chars": len(system_prompt),
-            "system_prompt_sha256": system_prompt_sha256,
-            "system_prompt": system_prompt,
-
-            "user_shared_prompt_chars": len(shared_prompt),
-            "user_shared_prompt_sha256": shared_prompt_sha256,
+            "shared_prompt_chars": len(shared_prompt),
+            "shared_prompt_sha256": shared_prompt_sha256,
         },
         "image_check_performed": not args.skip_image_check,
         "splits": split_summaries,

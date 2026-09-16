@@ -3,7 +3,7 @@
 set -e
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-DOCKER_IMAGE_TAG="frame-algorithm"
+DOCKER_IMAGE_TAG="procedure-algorithm"
 
 DOCKER_NOOP_VOLUME="${DOCKER_IMAGE_TAG}-volume"
 
@@ -15,6 +15,7 @@ OUTPUT_DIR="${SCRIPT_DIR}/test/output"
 GPU_FLAGS=()
 if docker info --format '{{range $k, $v := .Runtimes}}{{$k}} {{end}}' 2>/dev/null | grep -qw nvidia; then
     GPU_FLAGS=(--gpus all)
+    #GPU_FLAGS=(--gpus "device=1")
 else
     echo "=+= No NVIDIA container runtime detected - running on CPU"
 fi

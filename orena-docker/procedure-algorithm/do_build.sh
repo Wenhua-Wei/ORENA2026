@@ -3,7 +3,7 @@
 set -e
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-DOCKER_IMAGE_TAG="frame-algorithm"
+DOCKER_IMAGE_TAG="procedure-algorithm"
 
 # Build the Docker image.
 #

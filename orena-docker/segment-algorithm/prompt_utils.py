@@ -345,35 +345,85 @@ def build_prompt(
     num_frames: int,
     target_fps: float,
     max_frames: int,
+    sampling_description: str | None = None,
 ) -> str:
-    """Combine the reusable prompt with request-specific information."""
+    """
+    Combine the reusable prompt with request-specific information.
+
+    If sampling_description is None, preserve the original GLOBAL
+    sampling description exactly.
+
+    INTERVAL/FORWARD callers may supply a truthful description of
+    the specialized frame-selection policy.
+    """
 
     shared = shared_prompt.strip()
 
     if not shared:
-        raise ValueError("shared_prompt must not be empty.")
-
-    duration = float(request.end_time) - float(request.start_time)
-
-    if num_frames >= max_frames and duration > max_frames / target_fps:
-        frame_sampling_description = (
-            f"The input consists of {num_frames} chronologically ordered "
-            f"frames uniformly selected across the {duration:g}-second "
-            f"trimmed video segment after sampling at {target_fps:g} fps."
+        raise ValueError(
+            "shared_prompt must not be empty."
         )
+
+    duration = (
+        float(request.end_time)
+        - float(request.start_time)
+    )
+
+    # ------------------------------------------------------------------
+    # GLOBAL:
+    # Preserve the original prompt behavior exactly.
+    # ------------------------------------------------------------------
+    if sampling_description is None:
+
+        if (
+            num_frames >= max_frames
+            and duration
+            > max_frames / target_fps
+        ):
+            frame_sampling_description = (
+                f"The input consists of "
+                f"{num_frames} chronologically ordered "
+                f"frames uniformly selected across the "
+                f"{duration:g}-second trimmed video "
+                f"segment after sampling at "
+                f"{target_fps:g} fps."
+            )
+
+        else:
+            frame_sampling_description = (
+                f"The input consists of "
+                f"{num_frames} chronologically ordered "
+                f"frames sampled at "
+                f"{target_fps:g} fps from the "
+                f"{duration:g}-second trimmed video "
+                f"segment."
+            )
+
+    # ------------------------------------------------------------------
+    # INTERVAL / FORWARD:
+    # Use the exact description returned by video_utils.
+    # ------------------------------------------------------------------
     else:
         frame_sampling_description = (
-            f"The input consists of {num_frames} chronologically ordered "
-            f"frames sampled at {target_fps:g} fps from the "
-            f"{duration:g}-second trimmed video segment."
+            str(sampling_description).strip()
         )
+
+        if not frame_sampling_description:
+            raise ValueError(
+                "sampling_description must not be "
+                "empty when provided."
+            )
 
     shared = shared.replace(
         "{frame_sampling_description}",
         frame_sampling_description,
     )
 
-    return shared + "\n\n" + build_request_prompt(request)
+    return (
+        shared
+        + "\n\n"
+        + build_request_prompt(request)
+    )
 
 
 if __name__ == "__main__":
@@ -426,3 +476,5 @@ if __name__ == "__main__":
             max_frames=max_frames,
         )
     )
+
+
