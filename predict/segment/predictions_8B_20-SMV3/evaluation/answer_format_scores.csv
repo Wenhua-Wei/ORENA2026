@@ -1,8 +1,0 @@
-answer_format,scoring_method,correct,count,accuracy
-binary,deterministic,14,23,0.6086956521739131
-fo_class,deterministic,16,52,0.3076923076923077
-multiple_choice,llm_judge,3,15,0.2
-number,deterministic,4,24,0.16666666666666666
-open_ended,llm_judge,44,88,0.5
-percentage,deterministic,0,1,0.0
-time,deterministic,5,47,0.10638297872340426

@@ -1,6 +1,0 @@
-bucket_name,capability_group,distribution,ood,correct,count,accuracy
-aggregation_id,aggregation,id,False,10,50,0.2
-complex_reasoning_id,complex_reasoning,id,False,16,50,0.32
-event_understanding_id,event_understanding,id,False,34,50,0.68
-object_recognition_id,object_recognition,id,False,21,50,0.42
-temporal_grounding_id,temporal_grounding,id,False,5,50,0.1
